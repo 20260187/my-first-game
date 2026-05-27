@@ -11,56 +11,88 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 
 # ─────────────────────────────────────────────
-# 1. 초기화 및 설정
+# 1. 초기화
 # ─────────────────────────────────────────────
 pygame.init()
 WIDTH, HEIGHT = 1000, 700
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Blue Company")
 clock = pygame.time.Clock()
 
-font_large  = pygame.font.SysFont("arial", 64, bold=True)
 font_medium = pygame.font.SysFont("arial", 32, bold=True)
-font_small  = pygame.font.SysFont("arial", 22, bold=True)
 font_ui     = pygame.font.SysFont("arial", 28, bold=True)
 
-# 색상 정의
+# ─────────────────────────────────────────────
+# 색상
+# ─────────────────────────────────────────────
 BG_COLOR          = (15,  15,  18)
 WALL_COLOR        = (60,  60,  65)
-FLOOR_COLOR_A     = (35,  35,  40)   # 체크무늬 색 A
-FLOOR_COLOR_B     = (45,  45,  52)   # 체크무늬 색 B (살짝 밝게)
-PLAYER_COLOR      = (50,  150, 255)
+FLOOR_COLOR_A     = (35,  35,  40)
+FLOOR_COLOR_B     = (45,  45,  52)
 ENEMY_COLOR       = (255, 80,  80)
-GUN_COLOR         = (180, 180, 180)
 BULLET_COLOR      = (255, 220, 80)
 DOOR_CLOSED_COLOR = (200, 40,  40)
-DOOR_OPEN_COLOR   = (40,  200, 80)
 DOOR_FRAME_COLOR  = (100, 100, 110)
-
 MM_BG      = (5,   5,   5)
 MM_CURRENT = (255, 255, 255)
 MM_VISITED = (80,  80,  80)
 MM_LINE    = (40,  40,  40)
 
-CHECKER_SIZE = 100   # 체크무늬 한 칸 크기 (픽셀, 월드 단위)
+CHECKER_SIZE = 100
 
 # ─────────────────────────────────────────────
-# 2. 타이틀 이미지 로드
+# 2. 에셋 로드
 # ─────────────────────────────────────────────
+def load_image_colorkey(path, colorkey=(0, 0, 0)):
+    img = pygame.image.load(path).convert()
+    img.set_colorkey(colorkey)
+    return img
+
+# 타이틀 이미지
 title_img = None
 title_img_path = os.path.join(ASSETS_DIR, "start.png")
 if os.path.exists(title_img_path):
     raw = pygame.image.load(title_img_path).convert_alpha()
-    # 화면 비율 유지하며 최대 크기로 스케일
     img_w, img_h = raw.get_size()
     scale = min(WIDTH / img_w, HEIGHT / img_h)
     title_img = pygame.transform.smoothscale(raw, (int(img_w * scale), int(img_h * scale)))
 
+# 캐릭터 스프라이트 시트 (Hina_move.png) 가로 1280 x 세로 320, 4프레임
+SPRITE_FRAME_W   = 320
+SPRITE_FRAME_H   = 320
+SPRITE_FRAMES    = 4
+PLAYER_DRAW_SIZE = 64
+
+sprite_frames_right = []
+sprite_frames_left  = []
+
+hina_move_path = os.path.join(ASSETS_DIR, "Hina_move.png")
+if os.path.exists(hina_move_path):
+    sheet = load_image_colorkey(hina_move_path)
+    for i in range(SPRITE_FRAMES):
+        frame_raw = sheet.subsurface(pygame.Rect(i * SPRITE_FRAME_W, 0, SPRITE_FRAME_W, SPRITE_FRAME_H))
+        scaled = pygame.transform.smoothscale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
+        scaled.set_colorkey((0, 0, 0))
+        sprite_frames_right.append(scaled)
+        flipped = pygame.transform.flip(scaled, True, False)
+        flipped.set_colorkey((0, 0, 0))
+        sprite_frames_left.append(flipped)
+
+# 총 이미지 (hina_gun.png) 320x320
+GUN_DRAW_SIZE = 60
+gun_img_right = None
+gun_img_path  = os.path.join(ASSETS_DIR, "hina_gun.png")
+if os.path.exists(gun_img_path):
+    gun_raw       = load_image_colorkey(gun_img_path)
+    gun_img_right = pygame.transform.smoothscale(gun_raw, (GUN_DRAW_SIZE, GUN_DRAW_SIZE))
+    gun_img_right.set_colorkey((0, 0, 0))
+
 # ─────────────────────────────────────────────
-# 3. 방(Room) 설정
+# 3. 방(Room) 설정  ── 방 크기 절반 (2000 → 1000)
 # ─────────────────────────────────────────────
-ROOM_SIZE  = 2000
-GRID_STEP  = ROOM_SIZE + 400
-CORRIDOR_W = 300
+ROOM_SIZE  = 1000
+GRID_STEP  = ROOM_SIZE + 300
+CORRIDOR_W = 200
 
 class Room:
     def __init__(self, room_id, grid_x, grid_y):
@@ -73,7 +105,7 @@ class Room:
         self.rect      = pygame.Rect(self.world_x, self.world_y, self.width, self.height)
         self.is_cleared  = False
         self.has_enemies = False
-        self.doors       = []   # list of { rect, axis }
+        self.doors       = []
 
     def build_doors(self, connected_ids, all_rooms):
         self.doors = []
@@ -82,24 +114,24 @@ class Room:
             other = id_to_room[oid]
             dx = other.grid_pos[0] - self.grid_pos[0]
             dy = other.grid_pos[1] - self.grid_pos[1]
-            thick = 30
+            thick = 24
             dlen  = CORRIDOR_W
             if dx == 1:
-                cx = self.world_x + self.width - thick
-                cy = self.world_y + (self.height - dlen) // 2
-                self.doors.append({'rect': pygame.Rect(cx, cy, thick, dlen), 'axis': 'v'})
+                self.doors.append({'rect': pygame.Rect(self.world_x + self.width - thick,
+                                                        self.world_y + (self.height - dlen) // 2,
+                                                        thick, dlen), 'axis': 'v'})
             elif dx == -1:
-                cx = self.world_x
-                cy = self.world_y + (self.height - dlen) // 2
-                self.doors.append({'rect': pygame.Rect(cx, cy, thick, dlen), 'axis': 'v'})
+                self.doors.append({'rect': pygame.Rect(self.world_x,
+                                                        self.world_y + (self.height - dlen) // 2,
+                                                        thick, dlen), 'axis': 'v'})
             elif dy == 1:
-                cx = self.world_x + (self.width  - dlen) // 2
-                cy = self.world_y + self.height - thick
-                self.doors.append({'rect': pygame.Rect(cx, cy, dlen, thick), 'axis': 'h'})
+                self.doors.append({'rect': pygame.Rect(self.world_x + (self.width - dlen) // 2,
+                                                        self.world_y + self.height - thick,
+                                                        dlen, thick), 'axis': 'h'})
             elif dy == -1:
-                cx = self.world_x + (self.width  - dlen) // 2
-                cy = self.world_y
-                self.doors.append({'rect': pygame.Rect(cx, cy, dlen, thick), 'axis': 'h'})
+                self.doors.append({'rect': pygame.Rect(self.world_x + (self.width - dlen) // 2,
+                                                        self.world_y,
+                                                        dlen, thick), 'axis': 'h'})
 
 # ─────────────────────────────────────────────
 # 4. 방·통로 생성
@@ -113,13 +145,13 @@ def make_corridor(r1, r2):
     dx = r2.grid_pos[0] - r1.grid_pos[0]
     dy = r2.grid_pos[1] - r1.grid_pos[1]
     if dx == 1:
-        return pygame.Rect(r1.world_x+r1.width,
-                           r1.world_y+(r1.height-CORRIDOR_W)//2,
-                           GRID_STEP-ROOM_SIZE, CORRIDOR_W)
+        return pygame.Rect(r1.world_x + r1.width,
+                           r1.world_y + (r1.height - CORRIDOR_W) // 2,
+                           GRID_STEP - ROOM_SIZE, CORRIDOR_W)
     elif dy == 1:
-        return pygame.Rect(r1.world_x+(r1.width-CORRIDOR_W)//2,
-                           r1.world_y+r1.height,
-                           CORRIDOR_W, GRID_STEP-ROOM_SIZE)
+        return pygame.Rect(r1.world_x + (r1.width - CORRIDOR_W) // 2,
+                           r1.world_y + r1.height,
+                           CORRIDOR_W, GRID_STEP - ROOM_SIZE)
     return None
 
 id_map    = {r.id: r for r in rooms}
@@ -139,83 +171,82 @@ for sid, eids in connections.items():
 mini_connections = [(1,2),(1,3),(3,4)]
 
 # ─────────────────────────────────────────────
-# 5. 체크무늬 바닥 Surface 생성 헬퍼
+# 5. 체크무늬 바닥
 # ─────────────────────────────────────────────
 def draw_checker_floor(surface, world_rect, camera_x, camera_y):
-    """world_rect 영역에 체크무늬 바닥을 그린다."""
     wx, wy, ww, wh = world_rect.x, world_rect.y, world_rect.width, world_rect.height
-
-    # 월드 좌표 기준 체크 시작 타일 인덱스
     start_col = wx // CHECKER_SIZE
     start_row = wy // CHECKER_SIZE
     end_col   = (wx + ww) // CHECKER_SIZE + 1
     end_row   = (wy + wh) // CHECKER_SIZE + 1
-
     for row in range(start_row, end_row):
         for col in range(start_col, end_col):
             tile_wx = col * CHECKER_SIZE
             tile_wy = row * CHECKER_SIZE
-
-            # world_rect 와 교차하는 부분만 클리핑
-            inter_x = max(tile_wx, wx)
-            inter_y = max(tile_wy, wy)
-            inter_r = min(tile_wx + CHECKER_SIZE, wx + ww)
-            inter_b = min(tile_wy + CHECKER_SIZE, wy + wh)
-            if inter_r <= inter_x or inter_b <= inter_y:
-                continue
-
+            ix = max(tile_wx, wx);  iy = max(tile_wy, wy)
+            ir = min(tile_wx + CHECKER_SIZE, wx + ww)
+            ib = min(tile_wy + CHECKER_SIZE, wy + wh)
+            if ir <= ix or ib <= iy: continue
             color = FLOOR_COLOR_A if (col + row) % 2 == 0 else FLOOR_COLOR_B
-            sx = inter_x + camera_x
-            sy = inter_y + camera_y
-            pygame.draw.rect(surface, color,
-                             (sx, sy, inter_r - inter_x, inter_b - inter_y))
+            pygame.draw.rect(surface, color, (ix + camera_x, iy + camera_y, ir - ix, ib - iy))
 
 # ─────────────────────────────────────────────
-# 6. 문 그리기 헬퍼
+# 6. 문 그리기
 # ─────────────────────────────────────────────
-def draw_door(surface, door_dict, camera_x, camera_y, is_locked):
+def draw_door(surface, door_dict, camera_x, camera_y):
     r  = door_dict['rect']
-    sx, sy, sw, sh = r.x+camera_x, r.y+camera_y, r.width, r.height
-
-    # 문틀
+    sx, sy, sw, sh = r.x + camera_x, r.y + camera_y, r.width, r.height
     fp = 8
     pygame.draw.rect(surface, DOOR_FRAME_COLOR,
                      pygame.Rect(sx-fp, sy-fp, sw+fp*2, sh+fp*2), border_radius=4)
-    # 문 패널
-    color = DOOR_CLOSED_COLOR if is_locked else DOOR_OPEN_COLOR
-    pygame.draw.rect(surface, color, pygame.Rect(sx, sy, sw, sh), border_radius=3)
-
-    # 장식선 + 손잡이
+    pygame.draw.rect(surface, DOOR_CLOSED_COLOR, pygame.Rect(sx, sy, sw, sh), border_radius=3)
     if door_dict['axis'] == 'v':
-        mx = int(sx + sw//2)
+        mx = int(sx + sw // 2)
         pygame.draw.line(surface, (255,255,255), (mx, int(sy+6)), (mx, int(sy+sh-6)), 3)
         pygame.draw.circle(surface, (220,220,220), (mx, int(sy+sh//2)), 6)
     else:
-        my = int(sy + sh//2)
+        my = int(sy + sh // 2)
         pygame.draw.line(surface, (255,255,255), (int(sx+6), my), (int(sx+sw-6), my), 3)
         pygame.draw.circle(surface, (220,220,220), (int(sx+sw//2), my), 6)
-
-    # 자물쇠
-    if is_locked:
-        lx = int(sx + sw//2)
-        ly = int(sy + sh//2) - 10
-        pygame.draw.rect(surface, (255,200,0), pygame.Rect(lx-7, ly+5, 14, 10), border_radius=2)
-        pygame.draw.arc(surface, (255,200,0),  pygame.Rect(lx-6, ly-5, 12, 14), 0, math.pi, 3)
+    lx = int(sx + sw // 2)
+    ly = int(sy + sh // 2) - 10
+    pygame.draw.rect(surface, (255,200,0), pygame.Rect(lx-7, ly+5, 14, 10), border_radius=2)
+    pygame.draw.arc(surface, (255,200,0), pygame.Rect(lx-6, ly-5, 12, 14), 0, math.pi, 3)
 
 # ─────────────────────────────────────────────
-# 7. 플레이어 / 적 / 총알
+# 7. 플레이어
 # ─────────────────────────────────────────────
+GUN_VISIBLE_MS = 300   # 발사 후 총이 보이는 시간 (ms)
+
 class Player:
     def __init__(self):
         self.world_x         = rooms[0].world_x + rooms[0].width  // 2
         self.world_y         = rooms[0].world_y + rooms[0].height // 2
-        self.speed           = 6
         self.radius          = 20
-        self.attack_range    = 600
-        self.fire_cooldown   = 200
+
+        # ── 스펙 ──────────────────────────────────────────────────
+        self.speed          = 6      # 플레이어 이동 속도
+        self.attack_range   = 500    # 자동조준 최대 거리
+        self.fire_cooldown  = 200    # 연사 간격 ms (낮을수록 빠름)
+        self.bullet_speed   = 14     # 총알 이동 속도
+        self.bullet_range   = 800    # 총알 최대 사거리
+        self.bullet_radius  = 6      # 총알 크기
+
+        # 총 위치 오프셋 ── 여기서 수정
+        self.gun_offset_x   = 0      # 좌우 오프셋 (양수 → 오른쪽)
+        self.gun_offset_y   = 12     # 상하 오프셋 (양수 → 아래쪽)
+        # ────────────────────────────────────────────────────────────
+
         self.last_shot_time  = 0
         self.target_enemy    = None
         self.current_room_id = 1
+
+        self.anim_frame    = 0
+        self.anim_timer    = 0
+        self.anim_interval = 120
+        self.facing_right  = True
+        self.is_moving     = False
+        self.gun_angle     = 0.0
 
     def update(self, keys, enemies, current_time, bullets):
         dx, dy = 0, 0
@@ -223,10 +254,15 @@ class Player:
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx += 1
         if keys[pygame.K_UP]    or keys[pygame.K_w]: dy -= 1
         if keys[pygame.K_DOWN]  or keys[pygame.K_s]: dy += 1
+
+        self.is_moving = (dx != 0 or dy != 0)
+        if dx > 0: self.facing_right = True
+        elif dx < 0: self.facing_right = False
+
         if dx and dy:
             dx *= 0.7071; dy *= 0.7071
 
-        nx, ny = self.world_x + dx*self.speed, self.world_y + dy*self.speed
+        nx, ny = self.world_x + dx * self.speed, self.world_y + dy * self.speed
 
         active_room = None
         for room in rooms:
@@ -247,44 +283,89 @@ class Player:
         if (in_room or in_corridor) and can_exit:
             self.world_x, self.world_y = nx, ny
 
+        # 애니메이션
+        if self.is_moving and sprite_frames_right:
+            if current_time - self.anim_timer > self.anim_interval:
+                self.anim_frame = (self.anim_frame + 1) % SPRITE_FRAMES
+                self.anim_timer = current_time
+        else:
+            self.anim_frame = 0
+
+        # 자동 조준
         self.target_enemy = None
         min_dist = self.attack_range
         for enemy in enemies:
             if active_room and active_room.rect.collidepoint(enemy.world_x, enemy.world_y):
-                d = math.hypot(enemy.world_x-self.world_x, enemy.world_y-self.world_y)
+                d = math.hypot(enemy.world_x - self.world_x, enemy.world_y - self.world_y)
                 if d < min_dist:
                     min_dist = d
                     self.target_enemy = enemy
+
+        if self.target_enemy:
+            self.gun_angle = math.atan2(
+                self.target_enemy.world_y - self.world_y,
+                self.target_enemy.world_x - self.world_x)
+            if self.target_enemy.world_x >= self.world_x:
+                self.facing_right = True
+            else:
+                self.facing_right = False
 
         if self.target_enemy and (current_time - self.last_shot_time > self.fire_cooldown):
             self.fire(bullets, current_time)
 
     def fire(self, bullets, current_time):
-        angle = math.atan2(self.target_enemy.world_y-self.world_y,
-                           self.target_enemy.world_x-self.world_x)
-        bullets.append(Bullet(self.world_x, self.world_y, angle))
+        bullets.append(Bullet(self.world_x, self.world_y, self.gun_angle,
+                               self.bullet_speed, self.bullet_radius, self.bullet_range))
         self.last_shot_time = current_time
 
+    def draw(self, surface, screen_cx, screen_cy, current_time):
+        half = PLAYER_DRAW_SIZE // 2
 
+        # 스프라이트 먼저
+        if sprite_frames_right:
+            frames = sprite_frames_right if self.facing_right else sprite_frames_left
+            surface.blit(frames[self.anim_frame], (screen_cx - half, screen_cy - half))
+        else:
+            pygame.draw.circle(surface, (50, 150, 255), (screen_cx, screen_cy), self.radius)
+
+        # 총: 스프라이트 위에 그려서 앞에 보이게 / 마지막 발사 후 GUN_VISIBLE_MS 이내일 때만 표시
+        gun_visible = (current_time - self.last_shot_time) < GUN_VISIBLE_MS
+        if gun_visible and gun_img_right:
+            angle_deg = math.degrees(self.gun_angle)
+            rotated   = pygame.transform.rotate(gun_img_right, -angle_deg)
+            rotated.set_colorkey((0, 0, 0))
+            offset = 28
+            base_cx = screen_cx + int(math.cos(self.gun_angle) * offset)
+            base_cy = screen_cy + int(math.sin(self.gun_angle) * offset)
+            gun_cx = base_cx + self.gun_offset_x
+            gun_cy = base_cy + self.gun_offset_y
+            gr = rotated.get_rect(center=(gun_cx, gun_cy))
+            surface.blit(rotated, gr)
+
+# ─────────────────────────────────────────────
+# 8. 적 / 총알
+# ─────────────────────────────────────────────
 class Enemy:
     def __init__(self, x, y, room_id):
         self.world_x = x; self.world_y = y
         self.radius  = 22; self.room_id = room_id
 
 class Bullet:
-    def __init__(self, x, y, angle):
+    def __init__(self, x, y, angle, speed, radius, max_range):
         self.world_x = x; self.world_y = y
-        self.angle   = angle; self.speed = 14
-        self.radius  = 6
-        self.distance_traveled = 0; self.max_range = 800
+        self.angle   = angle
+        self.speed   = speed
+        self.radius  = radius
+        self.distance_traveled = 0
+        self.max_range = max_range
 
     def update(self):
-        self.world_x += math.cos(self.angle)*self.speed
-        self.world_y += math.sin(self.angle)*self.speed
+        self.world_x += math.cos(self.angle) * self.speed
+        self.world_y += math.sin(self.angle) * self.speed
         self.distance_traveled += self.speed
 
 # ─────────────────────────────────────────────
-# 8. 객체 생성 및 적 배치
+# 9. 객체 생성 및 적 배치
 # ─────────────────────────────────────────────
 player  = Player()
 enemies = []
@@ -292,28 +373,24 @@ for room in rooms:
     if room.id != 1:
         room.has_enemies = True
         for _ in range(random.randint(3, 5)):
-            ex = random.randint(room.world_x+100, room.world_x+room.width-100)
-            ey = random.randint(room.world_y+100, room.world_y+room.height-100)
+            ex = random.randint(room.world_x + 80, room.world_x + room.width  - 80)
+            ey = random.randint(room.world_y + 80, room.world_y + room.height - 80)
             enemies.append(Enemy(ex, ey, room.id))
 bullets = []
 current_stage_text = "2-5"
 
 # ─────────────────────────────────────────────
-# 9. 타이틀 화면
+# 10. 타이틀 화면
 # ─────────────────────────────────────────────
 def draw_title_screen(surface, tick):
     surface.fill((10, 10, 15))
-
     if title_img:
-        # 이미지 전체 화면 배경으로 표시
         img_rect = title_img.get_rect(center=(WIDTH//2, HEIGHT//2))
         surface.blit(title_img, img_rect)
-        # 반투명 오버레이 (텍스트 가독성 확보)
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 120))
         surface.blit(overlay, (0, 0))
     else:
-        # 이미지 없을 때 폴백 배경
         for gx in range(0, WIDTH, 60):
             pygame.draw.line(surface, (20,20,30), (gx,0), (gx,HEIGHT))
         for gy in range(0, HEIGHT, 60):
@@ -321,13 +398,10 @@ def draw_title_screen(surface, tick):
 
     if (tick // 500) % 2 == 0:
         prompt = font_medium.render("PRESS  SPACE  TO  START", True, (220, 220, 60))
-        surface.blit(prompt, prompt.get_rect(center=(WIDTH//2, HEIGHT//2 + 80)))
-
-    # 범례
-    ly = HEIGHT//2 + 150
+        surface.blit(prompt, prompt.get_rect(center=(WIDTH//2, HEIGHT - 80)))
 
 # ─────────────────────────────────────────────
-# 10. 메인 루프
+# 11. 메인 루프
 # ─────────────────────────────────────────────
 game_state = "title"
 running    = True
@@ -344,14 +418,12 @@ while running:
             if event.key == pygame.K_ESCAPE:
                 running = False
 
-    # ── 타이틀 ───────────────────────────────
     if game_state == "title":
         draw_title_screen(screen, current_time)
         pygame.display.flip()
         clock.tick(60)
         continue
 
-    # ── 게임 ─────────────────────────────────
     keys = pygame.key.get_pressed()
     player.update(keys, enemies, current_time, bullets)
 
@@ -366,14 +438,13 @@ while running:
         if bullet.distance_traveled > bullet.max_range:
             bullets.remove(bullet); continue
         for enemy in enemies[:]:
-            if math.hypot(bullet.world_x-enemy.world_x, bullet.world_y-enemy.world_y) < enemy.radius:
+            if math.hypot(bullet.world_x - enemy.world_x, bullet.world_y - enemy.world_y) < enemy.radius:
                 if bullet in bullets: bullets.remove(bullet)
                 enemies.remove(enemy); break
 
     camera_x = WIDTH  // 2 - player.world_x
     camera_y = HEIGHT // 2 - player.world_y
 
-    # ── 그리기 ───────────────────────────────
     screen.fill(BG_COLOR)
 
     # [1] 방 바닥 체크무늬 + 외벽
@@ -382,66 +453,61 @@ while running:
         rr = pygame.Rect(room.world_x+camera_x, room.world_y+camera_y, room.width, room.height)
         pygame.draw.rect(screen, WALL_COLOR, rr, 8)
 
-    # [2] 통로 바닥 (단색, 방보다 약간 어둡게)
+    # [2] 통로 바닥
     for corr in corridors:
         cr = pygame.Rect(corr.x+camera_x, corr.y+camera_y, corr.width, corr.height)
         pygame.draw.rect(screen, FLOOR_COLOR_A, cr)
 
-    # [3] 문 시각화
-    for room in rooms:
-        is_locked = room.has_enemies and not room.is_cleared
-        for door_dict in room.doors:
-            draw_door(screen, door_dict, camera_x, camera_y, is_locked)
+    # [3] 문: 플레이어가 방 안에 있고 적이 살아있을 때만 표시
+    active_room_now = next((r for r in rooms if r.rect.collidepoint(player.world_x, player.world_y)), None)
+    if active_room_now and active_room_now.has_enemies and not active_room_now.is_cleared:
+        for door_dict in active_room_now.doors:
+            draw_door(screen, door_dict, camera_x, camera_y)
 
     # [4] 적
     for enemy in enemies:
-        ex = int(enemy.world_x+camera_x)
-        ey = int(enemy.world_y+camera_y)
-        pygame.draw.circle(screen, ENEMY_COLOR, (ex,ey), enemy.radius)
-        pygame.draw.circle(screen, (255,255,255), (ex-6,ey-5), 5)
-        pygame.draw.circle(screen, (255,255,255), (ex+6,ey-5), 5)
-        pygame.draw.circle(screen, (0,0,0),       (ex-5,ey-5), 3)
-        pygame.draw.circle(screen, (0,0,0),       (ex+7,ey-5), 3)
+        ex = int(enemy.world_x + camera_x)
+        ey = int(enemy.world_y + camera_y)
+        pygame.draw.circle(screen, ENEMY_COLOR, (ex, ey), enemy.radius)
+        pygame.draw.circle(screen, (255,255,255), (ex-6, ey-5), 5)
+        pygame.draw.circle(screen, (255,255,255), (ex+6, ey-5), 5)
+        pygame.draw.circle(screen, (0,0,0),       (ex-5, ey-5), 3)
+        pygame.draw.circle(screen, (0,0,0),       (ex+7, ey-5), 3)
 
     # [5] 총알
     for bullet in bullets:
         pygame.draw.circle(screen, BULLET_COLOR,
                            (int(bullet.world_x+camera_x), int(bullet.world_y+camera_y)), bullet.radius)
 
-    # [6] 플레이어
-    pygame.draw.circle(screen, PLAYER_COLOR, (WIDTH//2, HEIGHT//2), player.radius)
-    gun_angle = math.atan2(player.target_enemy.world_y-player.world_y,
-                           player.target_enemy.world_x-player.world_x) if player.target_enemy else 0
-    gex = WIDTH //2 + math.cos(gun_angle)*32
-    gey = HEIGHT//2 + math.sin(gun_angle)*32
-    pygame.draw.line(screen, GUN_COLOR, (WIDTH//2,HEIGHT//2), (int(gex),int(gey)), 7)
+    # [6] 플레이어 (총 먼저, 그 위에 스프라이트)
+    player.draw(screen, WIDTH//2, HEIGHT//2, current_time)
 
     # [7] 미니맵
     mm_box_w, mm_box_h = 170, 180
     mm_x = WIDTH  - mm_box_w - 20
     mm_y = 20
-    pygame.draw.rect(screen, MM_BG,     (mm_x,mm_y,mm_box_w,mm_box_h), border_radius=6)
-    pygame.draw.rect(screen, (40,40,40),(mm_x,mm_y,mm_box_w,mm_box_h), 2, border_radius=6)
+    pygame.draw.rect(screen, MM_BG,      (mm_x,mm_y,mm_box_w,mm_box_h), border_radius=6)
+    pygame.draw.rect(screen, (40,40,40), (mm_x,mm_y,mm_box_w,mm_box_h), 2, border_radius=6)
 
     icon_size    = 20
     grid_spacing = 40
-    cx = mm_x + mm_box_w//2
-    cy = mm_y + mm_box_h//2 - 10
+    cx = mm_x + mm_box_w // 2
+    cy = mm_y + mm_box_h // 2 - 10
 
     for sid, eid in mini_connections:
         r1, r2 = id_map[sid], id_map[eid]
         pygame.draw.line(screen, MM_LINE,
-            (cx+r1.grid_pos[0]*grid_spacing, cy+r1.grid_pos[1]*grid_spacing),
-            (cx+r2.grid_pos[0]*grid_spacing, cy+r2.grid_pos[1]*grid_spacing), 6)
+            (cx + r1.grid_pos[0]*grid_spacing, cy + r1.grid_pos[1]*grid_spacing),
+            (cx + r2.grid_pos[0]*grid_spacing, cy + r2.grid_pos[1]*grid_spacing), 6)
 
     for room in rooms:
-        rcx = cx + room.grid_pos[0]*grid_spacing
-        rcy = cy + room.grid_pos[1]*grid_spacing
+        rcx = cx + room.grid_pos[0] * grid_spacing
+        rcy = cy + room.grid_pos[1] * grid_spacing
         ir = pygame.Rect(rcx-icon_size//2, rcy-icon_size//2, icon_size, icon_size)
         if room.id == player.current_room_id:
             col = MM_CURRENT
         elif room.is_cleared:
-            col = (60,180,80)
+            col = (60, 180, 80)
         else:
             col = MM_VISITED
         pygame.draw.rect(screen, col, ir, border_radius=3)
@@ -450,6 +516,7 @@ while running:
 
     stage_surf = font_ui.render(current_stage_text, True, (255,255,255))
     screen.blit(stage_surf, stage_surf.get_rect(centerx=mm_x+mm_box_w//2, top=mm_y+mm_box_h+8))
+
     pygame.display.flip()
     clock.tick(60)
 
