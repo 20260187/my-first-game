@@ -87,8 +87,16 @@ if os.path.exists(gun_img_path):
     gun_img_right = pygame.transform.smoothscale(gun_raw, (GUN_DRAW_SIZE, GUN_DRAW_SIZE))
     gun_img_right.set_colorkey((0, 0, 0))
 
+# 총 회전 이미지 캐시 (1도 단위 사전 계산, 360장)
+gun_rotated_cache = {}
+if gun_img_right:
+    for deg in range(360):
+        rot = pygame.transform.rotate(gun_img_right, -deg)
+        rot.set_colorkey((0, 0, 0))
+        gun_rotated_cache[deg] = rot
+
 # ─────────────────────────────────────────────
-# 3. 방(Room) 설정  ── 방 크기 절반 (2000 → 1000)
+# 3. 방(Room) 설정
 # ─────────────────────────────────────────────
 ROOM_SIZE  = 1000
 GRID_STEP  = ROOM_SIZE + 300
@@ -106,6 +114,7 @@ class Room:
         self.is_cleared  = False
         self.has_enemies = False
         self.doors       = []
+        self.floor_surf  = None   # 사전 렌더링된 체크무늬 Surface
 
     def build_doors(self, connected_ids, all_rooms):
         self.doors = []
@@ -133,6 +142,20 @@ class Room:
                                                         self.world_y,
                                                         dlen, thick), 'axis': 'h'})
 
+    def build_floor(self):
+        """체크무늬 바닥을 Surface에 한 번만 그려서 저장"""
+        surf = pygame.Surface((self.width, self.height))
+        base_col = self.world_x // CHECKER_SIZE
+        base_row = self.world_y // CHECKER_SIZE
+        cols = self.width  // CHECKER_SIZE + 1
+        rows = self.height // CHECKER_SIZE + 1
+        for row in range(rows):
+            for col in range(cols):
+                color = FLOOR_COLOR_A if (base_col + col + base_row + row) % 2 == 0 else FLOOR_COLOR_B
+                pygame.draw.rect(surf, color,
+                                 (col * CHECKER_SIZE, row * CHECKER_SIZE, CHECKER_SIZE, CHECKER_SIZE))
+        self.floor_surf = surf
+
 # ─────────────────────────────────────────────
 # 4. 방·통로 생성
 # ─────────────────────────────────────────────
@@ -140,6 +163,7 @@ rooms = [Room(1,0,0), Room(2,1,0), Room(3,0,1), Room(4,0,2)]
 connections = {1:[2,3], 2:[1], 3:[1,4], 4:[3]}
 for room in rooms:
     room.build_doors(connections[room.id], rooms)
+    room.build_floor()   # 체크무늬 사전 렌더링
 
 def make_corridor(r1, r2):
     dx = r2.grid_pos[0] - r1.grid_pos[0]
@@ -171,27 +195,7 @@ for sid, eids in connections.items():
 mini_connections = [(1,2),(1,3),(3,4)]
 
 # ─────────────────────────────────────────────
-# 5. 체크무늬 바닥
-# ─────────────────────────────────────────────
-def draw_checker_floor(surface, world_rect, camera_x, camera_y):
-    wx, wy, ww, wh = world_rect.x, world_rect.y, world_rect.width, world_rect.height
-    start_col = wx // CHECKER_SIZE
-    start_row = wy // CHECKER_SIZE
-    end_col   = (wx + ww) // CHECKER_SIZE + 1
-    end_row   = (wy + wh) // CHECKER_SIZE + 1
-    for row in range(start_row, end_row):
-        for col in range(start_col, end_col):
-            tile_wx = col * CHECKER_SIZE
-            tile_wy = row * CHECKER_SIZE
-            ix = max(tile_wx, wx);  iy = max(tile_wy, wy)
-            ir = min(tile_wx + CHECKER_SIZE, wx + ww)
-            ib = min(tile_wy + CHECKER_SIZE, wy + wh)
-            if ir <= ix or ib <= iy: continue
-            color = FLOOR_COLOR_A if (col + row) % 2 == 0 else FLOOR_COLOR_B
-            pygame.draw.rect(surface, color, (ix + camera_x, iy + camera_y, ir - ix, ib - iy))
-
-# ─────────────────────────────────────────────
-# 6. 문 그리기
+# 5. 문 그리기
 # ─────────────────────────────────────────────
 def draw_door(surface, door_dict, camera_x, camera_y):
     r  = door_dict['rect']
@@ -214,9 +218,9 @@ def draw_door(surface, door_dict, camera_x, camera_y):
     pygame.draw.arc(surface, (255,200,0), pygame.Rect(lx-6, ly-5, 12, 14), 0, math.pi, 3)
 
 # ─────────────────────────────────────────────
-# 7. 플레이어
+# 6. 플레이어
 # ─────────────────────────────────────────────
-GUN_VISIBLE_MS = 300   # 발사 후 총이 보이는 시간 (ms)
+GUN_VISIBLE_MS = 300
 
 class Player:
     def __init__(self):
@@ -225,16 +229,12 @@ class Player:
         self.radius          = 20
 
         # ── 스펙 ──────────────────────────────────────────────────
-        self.speed          = 6      # 플레이어 이동 속도
-        self.attack_range   = 500    # 자동조준 최대 거리
-        self.fire_cooldown  = 200    # 연사 간격 ms (낮을수록 빠름)
-        self.bullet_speed   = 14     # 총알 이동 속도
-        self.bullet_range   = 800    # 총알 최대 사거리
-        self.bullet_radius  = 6      # 총알 크기
-
-        # 총 위치 오프셋 ── 여기서 수정
-        self.gun_offset_x   = 0      # 좌우 오프셋 (양수 → 오른쪽)
-        self.gun_offset_y   = 12     # 상하 오프셋 (양수 → 아래쪽)
+        self.speed          = 6
+        self.attack_range   = 500
+        self.fire_cooldown  = 200
+        self.bullet_speed   = 14
+        self.bullet_range   = 800
+        self.bullet_radius  = 6
         # ────────────────────────────────────────────────────────────
 
         self.last_shot_time  = 0
@@ -247,6 +247,7 @@ class Player:
         self.facing_right  = True
         self.is_moving     = False
         self.gun_angle     = 0.0
+        self._cached_deg   = None   # 각도 캐시용
 
     def update(self, keys, enemies, current_time, bullets):
         dx, dy = 0, 0
@@ -296,19 +297,19 @@ class Player:
         min_dist = self.attack_range
         for enemy in enemies:
             if active_room and active_room.rect.collidepoint(enemy.world_x, enemy.world_y):
-                d = math.hypot(enemy.world_x - self.world_x, enemy.world_y - self.world_y)
-                if d < min_dist:
-                    min_dist = d
+                # hypot 대신 거리 제곱으로 비교 (sqrt 생략)
+                ddx = enemy.world_x - self.world_x
+                ddy = enemy.world_y - self.world_y
+                d_sq = ddx * ddx + ddy * ddy
+                if d_sq < min_dist * min_dist:
+                    min_dist = math.sqrt(d_sq)
                     self.target_enemy = enemy
 
         if self.target_enemy:
             self.gun_angle = math.atan2(
                 self.target_enemy.world_y - self.world_y,
                 self.target_enemy.world_x - self.world_x)
-            if self.target_enemy.world_x >= self.world_x:
-                self.facing_right = True
-            else:
-                self.facing_right = False
+            self.facing_right = self.target_enemy.world_x >= self.world_x
 
         if self.target_enemy and (current_time - self.last_shot_time > self.fire_cooldown):
             self.fire(bullets, current_time)
@@ -328,22 +329,17 @@ class Player:
         else:
             pygame.draw.circle(surface, (50, 150, 255), (screen_cx, screen_cy), self.radius)
 
-        # 총: 스프라이트 위에 그려서 앞에 보이게 / 마지막 발사 후 GUN_VISIBLE_MS 이내일 때만 표시
-        gun_visible = (current_time - self.last_shot_time) < GUN_VISIBLE_MS
-        if gun_visible and gun_img_right:
-            angle_deg = math.degrees(self.gun_angle)
-            rotated   = pygame.transform.rotate(gun_img_right, -angle_deg)
-            rotated.set_colorkey((0, 0, 0))
-            offset = 28
-            base_cx = screen_cx + int(math.cos(self.gun_angle) * offset)
-            base_cy = screen_cy + int(math.sin(self.gun_angle) * offset)
-            gun_cx = base_cx + self.gun_offset_x
-            gun_cy = base_cy + self.gun_offset_y
-            gr = rotated.get_rect(center=(gun_cx, gun_cy))
-            surface.blit(rotated, gr)
+        # 총: 발사 후 GUN_VISIBLE_MS 이내일 때만, 캐시된 회전 이미지 사용
+        if (current_time - self.last_shot_time) < GUN_VISIBLE_MS and gun_rotated_cache:
+            deg = int(math.degrees(self.gun_angle)) % 360
+            rotated = gun_rotated_cache[deg]
+            offset  = 28
+            gun_cx  = screen_cx + int(math.cos(self.gun_angle) * offset)
+            gun_cy  = screen_cy + int(math.sin(self.gun_angle) * offset)
+            surface.blit(rotated, rotated.get_rect(center=(gun_cx, gun_cy)))
 
 # ─────────────────────────────────────────────
-# 8. 적 / 총알
+# 7. 적 / 총알
 # ─────────────────────────────────────────────
 class Enemy:
     def __init__(self, x, y, room_id):
@@ -356,16 +352,18 @@ class Bullet:
         self.angle   = angle
         self.speed   = speed
         self.radius  = radius
+        self.dx      = math.cos(angle) * speed   # 매 프레임 cos/sin 재계산 제거
+        self.dy      = math.sin(angle) * speed
         self.distance_traveled = 0
         self.max_range = max_range
 
     def update(self):
-        self.world_x += math.cos(self.angle) * self.speed
-        self.world_y += math.sin(self.angle) * self.speed
+        self.world_x += self.dx
+        self.world_y += self.dy
         self.distance_traveled += self.speed
 
 # ─────────────────────────────────────────────
-# 9. 객체 생성 및 적 배치
+# 8. 객체 생성 및 적 배치
 # ─────────────────────────────────────────────
 player  = Player()
 enemies = []
@@ -380,7 +378,7 @@ bullets = []
 current_stage_text = "2-5"
 
 # ─────────────────────────────────────────────
-# 10. 타이틀 화면
+# 9. 타이틀 화면
 # ─────────────────────────────────────────────
 def draw_title_screen(surface, tick):
     surface.fill((10, 10, 15))
@@ -401,7 +399,7 @@ def draw_title_screen(surface, tick):
         surface.blit(prompt, prompt.get_rect(center=(WIDTH//2, HEIGHT - 80)))
 
 # ─────────────────────────────────────────────
-# 11. 메인 루프
+# 10. 메인 루프
 # ─────────────────────────────────────────────
 game_state = "title"
 running    = True
@@ -427,36 +425,45 @@ while running:
     keys = pygame.key.get_pressed()
     player.update(keys, enemies, current_time, bullets)
 
+    # 방 클리어 체크
     for room in rooms:
         if room.has_enemies:
             room.is_cleared = not any(e.room_id == room.id for e in enemies)
         else:
             room.is_cleared = True
 
+    # 총알 이동 & 충돌 — bullet in bullets 제거, 플래그로 처리
     for bullet in bullets[:]:
         bullet.update()
         if bullet.distance_traveled > bullet.max_range:
-            bullets.remove(bullet); continue
+            bullets.remove(bullet)
+            continue
+        hit = False
         for enemy in enemies[:]:
-            if math.hypot(bullet.world_x - enemy.world_x, bullet.world_y - enemy.world_y) < enemy.radius:
-                if bullet in bullets: bullets.remove(bullet)
-                enemies.remove(enemy); break
+            ddx = bullet.world_x - enemy.world_x
+            ddy = bullet.world_y - enemy.world_y
+            if ddx*ddx + ddy*ddy < enemy.radius * enemy.radius:
+                enemies.remove(enemy)
+                hit = True
+                break
+        if hit:
+            bullets.remove(bullet)
 
     camera_x = WIDTH  // 2 - player.world_x
     camera_y = HEIGHT // 2 - player.world_y
 
     screen.fill(BG_COLOR)
 
-    # [1] 방 바닥 체크무늬 + 외벽
+    # [1] 방 바닥 (사전 렌더링 Surface blit) + 외벽
     for room in rooms:
-        draw_checker_floor(screen, room.rect, camera_x, camera_y)
+        screen.blit(room.floor_surf, (room.world_x + camera_x, room.world_y + camera_y))
         rr = pygame.Rect(room.world_x+camera_x, room.world_y+camera_y, room.width, room.height)
         pygame.draw.rect(screen, WALL_COLOR, rr, 8)
 
     # [2] 통로 바닥
     for corr in corridors:
-        cr = pygame.Rect(corr.x+camera_x, corr.y+camera_y, corr.width, corr.height)
-        pygame.draw.rect(screen, FLOOR_COLOR_A, cr)
+        pygame.draw.rect(screen, FLOOR_COLOR_A,
+                         (corr.x+camera_x, corr.y+camera_y, corr.width, corr.height))
 
     # [3] 문: 플레이어가 방 안에 있고 적이 살아있을 때만 표시
     active_room_now = next((r for r in rooms if r.rect.collidepoint(player.world_x, player.world_y)), None)
@@ -479,7 +486,7 @@ while running:
         pygame.draw.circle(screen, BULLET_COLOR,
                            (int(bullet.world_x+camera_x), int(bullet.world_y+camera_y)), bullet.radius)
 
-    # [6] 플레이어 (총 먼저, 그 위에 스프라이트)
+    # [6] 플레이어
     player.draw(screen, WIDTH//2, HEIGHT//2, current_time)
 
     # [7] 미니맵
