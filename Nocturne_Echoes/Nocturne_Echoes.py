@@ -20,7 +20,7 @@ SCALE = 1.2
 
 WIDTH, HEIGHT = 1000, 700
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Blue Company")
+pygame.display.set_caption("Nocturne Echoes")
 clock = pygame.time.Clock()
 
 _nanum_path = os.path.join(ASSETS_DIR, "NanumGothic.ttf")
@@ -86,22 +86,35 @@ prefect_room_rect = None
 prefect_room_path = os.path.join(ASSETS_DIR, "prefect_room.png")
 if os.path.exists(prefect_room_path):
     _raw_pr = pygame.image.load(prefect_room_path).convert()
-    prefect_room_img  = pygame.transform.smoothscale(_raw_pr, (_room_size, _room_size))
+    _room_size_pr = min(HEIGHT, WIDTH)
+    prefect_room_img  = pygame.transform.smoothscale(_raw_pr, (_room_size_pr, _room_size_pr))
     prefect_room_rect = prefect_room_img.get_rect(center=(WIDTH // 2, HEIGHT // 2))
 
 # ── aco 캐릭터 이미지 로드 ──
-ACO_DRAW_SIZE = int(72 * SCALE)
+# ★ FIX 1: convert_alpha() + colorkey (0,0,0) 적용해서 검은 배경 제거
+# 원본 비율 190(가로) x 250(세로), 히나와 동일한 높이(int(64*SCALE)) 기준으로 가로 맞춤
+_AKO_ORIG_W, _AKO_ORIG_H = 190, 250
+_AKO_TARGET_H = int(80 * SCALE)
+_AKO_TARGET_W = int(_AKO_TARGET_H * _AKO_ORIG_W / _AKO_ORIG_H)
+ACO_DRAW_W = _AKO_TARGET_W
+ACO_DRAW_H = _AKO_TARGET_H
+ACO_DRAW_SIZE = max(ACO_DRAW_W, ACO_DRAW_H)  # 기존 코드와의 호환용
+
 aco_img = None
-aco_img_path = os.path.join(ASSETS_DIR, "aco.png")
+aco_img_path = os.path.join(ASSETS_DIR, "ako.png")
 if os.path.exists(aco_img_path):
     try:
         _aco_raw = pygame.image.load(aco_img_path).convert_alpha()
-        aco_img  = pygame.transform.smoothscale(_aco_raw, (ACO_DRAW_SIZE, ACO_DRAW_SIZE))
+        _aco_scaled = pygame.transform.smoothscale(_aco_raw, (ACO_DRAW_W, ACO_DRAW_H))
+        _aco_scaled.set_colorkey((0, 0, 0))
+        aco_img = _aco_scaled
     except Exception as e:
-        print(f"[WARN] aco 이미지 로드 실패: {e}")
+        print(f"[WARN] ako 이미지 로드 실패: {e}")
+        # 로드 실패 시 None 유지 → 원(circle)으로 폴백
 
-# aco 선도부실 화면 위치 (책상 앞 — 마우스 좌표 보면서 조정)
-ACO_SCREEN_POS = (430, 400)
+# aco 선도부실 화면 위치 (책상 앞)
+ACO_SCREEN_POS      = (430, 400)
+ACO_INTERACT_RADIUS = 100
 
 # ── 히나 방 인터렉션 핫스팟 (화면 좌표) ──
 WARDROBE_POS    = (770, 460)
@@ -233,7 +246,7 @@ def play_funky_road():
         print("[WARN] funky_road.opus 파일 없음")
 
 # ─────────────────────────────────────────────
-# 히나 방 이동 가능 구역  ★ 절대 수정하지 않음 ★
+# 히나 방 이동 가능 구역
 # ─────────────────────────────────────────────
 _HINA_WALK_POLY = [
     (240, 580),
@@ -246,21 +259,14 @@ _HINA_WALK_POLY = [
 
 # ─────────────────────────────────────────────
 # 선도부실 이동 가능 구역
-# 이미지 627x627 → 700x700, center=(500,350) → left=150, top=0
-# 변환: screen_x = img_x*(700/627)+150,  screen_y = img_y*(700/627)
-#
-# ★ 범위 조정 방법:
-#   1. 게임 실행 → 선도부실에 진입
-#   2. 파란 선(디버그 폴리곤)과 좌상단 마우스 좌표를 확인
-#   3. 아래 꼭짓점 튜플을 원하는 좌표로 수정
 # ─────────────────────────────────────────────
 _PREFECT_WALK_POLY = [
-    (280, 600),   # 좌하단
-    (280, 450),   # 책상 하단 우측
-    (350, 450),   # 책상 우측 하단
-    (350, 190),   # 책상 우측 상단 / 상단 통로
-    (700, 190),   # 우상단 (책장 왼쪽)
-    (700, 600),   # 우하단
+    (280, 600),
+    (280, 450),
+    (350, 450),
+    (350, 190),
+    (700, 190),
+    (700, 600),
 ]
 
 # ─────────────────────────────────────────────
@@ -450,10 +456,8 @@ class Player:
         self.is_moving     = False
         self.gun_angle     = 0.0
 
-        # 히나 방 / 선도부실 공용 화면 좌표
         self.hina_sx = float(WIDTH  // 2)
         self.hina_sy = float(HEIGHT // 2)
-        # 의상: "uniform" | "sleep"
         self.costume = "uniform"
 
     def _can_fire(self, current_time):
@@ -466,7 +470,6 @@ class Player:
                 return True
             return False
 
-    # ── 히나 방 이동 (히나 방 폴리곤 사용) ──
     def update_hina_room(self, keys, current_time):
         dx, dy = 0, 0
         if keys[pygame.K_LEFT]  or keys[pygame.K_a]: dx -= 1
@@ -499,7 +502,6 @@ class Player:
         else:
             self.anim_frame = 0
 
-    # ── 선도부실 이동 (선도부실 폴리곤 사용) ──
     def update_prefect_room(self, keys, current_time):
         dx, dy = 0, 0
         if keys[pygame.K_LEFT]  or keys[pygame.K_a]: dx -= 1
@@ -773,27 +775,76 @@ OPENING_LINES = [
 # 대화 데이터
 # ─────────────────────────────────────────────
 HINA_ROOM_DIALOG = [
-    ("히나", "선도부", "하아…… 드디어 끝났네."),
-    ("히나", "선도부", "연주회가 끝나면 잠시 숨 좀 돌릴 수 있을 줄 알았는데……."),
-    ("히나", "선도부", "그새를 못 참고 만마전에서 소동을 벌일 줄은 몰랐어. 정말이지, 한 시도 눈을 뗄 수가 없다니까."),
-    ("히나", "선도부", "……일단 빨리 옷부터 갈아입고 자야겠어. 피곤해도 제복을 입은 채로 누울 순 없으니까."),
+    ("", "", "(하아…… 드디어 끝났군.)"),
+    ("", "", "(연주회가 끝나면 잠시 숨 좀 돌릴 수 있을 줄 알았는데…….)"),
+    ("", "", "(그새를 못 참고 만마전에서 소동을 벌이다니.)"),
+    ("", "", "(정말이지, 잠시도 방심할 수가 없군.)"),
+    ("", "", "(……일단 옷부터 갈아입고 자야겠어.)"),
+    ("", "", "(아무리 피곤해도 제복 차림으로 침대에 눕고 싶진 않으니까.)"),
 ]
 
 BED_UNIFORM_DIALOG = [
-    ("히나", "선도부", "……아무리 피곤해도 제복을 입은 채로 침대에 누울 수는 없어."),
-    ("히나", "선도부", "귀찮더라도 옷장으로 가서 잠옷으로 갈아입자."),
+    ("", "", "(……아무리 피곤해도 제복을 입은 채로 침대에 누울 수는 없어.)"),
+    ("", "", "(귀찮더라도 잠옷으로 갈아입고 자야겠어.)"),
 ]
 
 BED_SLEEP_DIALOG = [
-    ("???", "", "정해진 궤도에서 벗어난 선율이여, 종막의 페이지를 넘겨라."),
+    ("???", "", "정해진 악보에서 벗어난 선율이여……."),
+    ("???", "", "이제 마지막 장을 넘길 시간이다."),
+
     ("히나", "선도부", "……!?"),
-    ("", "", "(불쾌한 목소리에 황급히 주위를 둘러보았지만, 그곳에는 아무도 존재하지 않았다.)"),
-    ("히나", "선도부", "……누구지? 아니, 지독한 과로 탓에 이명이라도 들리는 건가……."),
-    ("히나", "선도부", "환청까지 들릴 정도라니, 나도 확실히 한계인가 보네."),
-    ("히나", "선도부", "……쓸데없는 생각은 그만하자. 어떻게든 자두지 않으면 내일 일정에 지장이 생길 테니까."),
+
+    ("", "", "(불쾌한 목소리에 황급히 주위를 둘러보았지만, 그곳에는 아무도 없었다.)"),
+
+    ("히나", "선도부", "……누구지?"),
+
+    ("", "", "(설마, 과로 때문에 환청이라도 들리는 건가…….)"),
+    ("", "", "(환청까지 들리다니…….)"),
+    ("", "", "(확실히 무리한 모양이군.)"),
+
+    ("", "", "(……지금은 신경 쓸 여유가 없어.)"),
+    ("", "", "(우선 자도록 하자.)"),
 ]
 
-MISSION_HINA_ROOM = "제복을 갈아입자."
+ACO_DIALOG = [
+    ("히나", "선도부", "...아코."),
+    ("아코", "선도부", "아, 히나 선도부장님. 오셨군요."),
+    ("히나", "선도부", "무슨 일이지?"),
+    ("아코", "선도부", "최근 여러 학원에서 심상치 않은 사건들이 발생하고 있습니다."),
+    ("히나", "선도부", "심상치 않은 사건?"),
+    ("아코", "선도부", "네. 타 학원 학생이 다른 학원에 나타나 소란을 일으키는 사건입니다."),
+    ("히나", "선도부", "..."),
+    ("아코", "선도부", "트리니티 학생이 밀레니엄에서 난동을 부리거나, 밀레니엄 학생이 붉은겨울에서 문제를 일으키는 식입니다."),
+    ("히나", "선도부", "우연은 아닌 것 같군."),
+    ("아코", "선도부", "저도 그렇게 판단하고 있습니다."),
+    ("아코", "선도부", "이미 여러 학원에서 항의와 문의가 들어오고 있는 상황입니다."),
+    ("히나", "선도부", "피해는?"),
+    ("아코", "선도부", "다행히 중상자는 없습니다만, 학원 간 갈등이 심화되고 있습니다."),
+    ("히나", "선도부", "원인은 밝혀졌나?"),
+    ("아코", "선도부", "아직입니다."),
+    ("아코", "선도부", "특이한 점은 사건 당사자들이 모두 사건 직전의 기억을 잃어버렸다는 것입니다."),
+    ("히나", "선도부", "기억을?"),
+    ("아코", "선도부", "네. 왜 그 장소에 있었는지조차 설명하지 못하고 있습니다."),
+    ("히나", "선도부", "...수상하군."),
+    ("아코", "선도부", "선도부 인원들을 투입해 조사했지만 별다른 성과는 없었습니다."),
+    ("히나", "선도부", "그래서 내가 필요한 건가."),
+    ("아코", "선도부", "예."),
+    ("아코", "선도부", "이 정도 규모의 사건을 맡길 수 있는 사람은 선도부장님뿐입니다."),
+    ("히나", "선도부", "...하아."),
+    ("아코", "선도부", "죄송합니다."),
+    ("히나", "선도부", "됐어. 자료는?"),
+    ("아코", "선도부", "이미 준비해 두었습니다."),
+    ("아코", "선도부", "최근 일주일 동안 보고된 사건들을 정리한 문서입니다."),
+    ("히나", "선도부", "...많군."),
+    ("아코", "선도부", "생각보다 상황이 심각합니다."),
+    ("히나", "선도부", "알겠다."),
+    ("히나", "선도부", "문제 학생들을 처리하러 간다."),
+    ("아코", "선도부", "예, 조심히 다녀오십시오.")
+]
+
+MISSION_HINA_ROOM = "제복을 갈아입기."
+MISSION_SLEEP     = "침대에 눕기."
+MISSION_PREFECT   = "아코에게 말을 걸기."
 
 # ─────────────────────────────────────────────
 # 오프닝 나레이션 시스템
@@ -868,11 +919,6 @@ class OpeningNarration:
 # ─────────────────────────────────────────────
 class DialogSystem:
     CHAR_INTERVAL  = 38
-    PANEL_H        = 160
-    PANEL_MARGIN_X = 30
-    NAME_BAR_H     = 42
-    PAD            = 14
-    ARROW_BOUNCE   = 6
 
     def __init__(self, lines):
         self.lines    = lines
@@ -916,7 +962,6 @@ class DialogSystem:
         PAD_X      = 28
         PAD_Y      = 18
         NAME_H     = 52
-        DIVIDER_Y  = NAME_H
 
         panel_y = HEIGHT - PANEL_H
         panel_w = WIDTH
@@ -944,7 +989,7 @@ class DialogSystem:
             affil_y = name_y + name_surf.get_height() - affil_surf.get_height() - 2
             surface.blit(affil_surf, (affil_x, affil_y))
 
-        line_y = panel_y + DIVIDER_Y
+        line_y = panel_y + NAME_H
         pygame.draw.line(surface, (255, 255, 255, 60),
                          (0, line_y), (panel_w, line_y), 1)
 
@@ -1072,7 +1117,7 @@ def draw_fadeout(surface, alpha):
     surface.blit(ov, (0, 0))
 
 # ─────────────────────────────────────────────
-# 히나 방 씬  ★ 수정 없음 ★
+# 히나 방 씬
 # ─────────────────────────────────────────────
 def draw_hina_room(surface, player, current_time,
                    near_wardrobe=False, near_bed=False, mission=None):
@@ -1094,7 +1139,6 @@ def draw_hina_room(surface, player, current_time,
     if mission:
         draw_mission(surface, mission)
 
-    # ── 디버그: 히나 방 이동 가능 구역 (빨간색) ──
     if len(_HINA_WALK_POLY) >= 2:
         pygame.draw.polygon(surface, (255, 0, 0), _HINA_WALK_POLY, 2)
         for pt in _HINA_WALK_POLY:
@@ -1103,7 +1147,8 @@ def draw_hina_room(surface, player, current_time,
 # ─────────────────────────────────────────────
 # 선도부실 씬
 # ─────────────────────────────────────────────
-def draw_prefect_room(surface, player, current_time):
+def draw_prefect_room(surface, player, current_time,
+                      near_aco=False, mission=None):
     surface.fill((0, 0, 0))
     if prefect_room_img:
         surface.blit(prefect_room_img, prefect_room_rect)
@@ -1115,23 +1160,30 @@ def draw_prefect_room(surface, player, current_time):
         lbl = font_mission.render("선도부실", True, (180, 180, 200))
         surface.blit(lbl, lbl.get_rect(center=(WIDTH//2, HEIGHT//2)))
 
-    # aco 캐릭터 그리기
+    # ── aco 캐릭터 그리기 ──
     if aco_img:
-        ax = ACO_SCREEN_POS[0] - ACO_DRAW_SIZE // 2
-        ay = ACO_SCREEN_POS[1] - ACO_DRAW_SIZE // 2
+        ax = ACO_SCREEN_POS[0] - ACO_DRAW_W // 2
+        ay = ACO_SCREEN_POS[1] - ACO_DRAW_H // 2
         surface.blit(aco_img, (ax, ay))
     else:
-        # aco.png 없을 때 대체 원
-        pygame.draw.circle(surface, (180, 120, 220), ACO_SCREEN_POS, 20)
+        # 폴백: 보라색 원 + "ACO" 텍스트
+        pygame.draw.circle(surface, (180, 120, 220), ACO_SCREEN_POS, 28)
+        lbl = font_mini.render("ACO", True, (255, 255, 255))
+        surface.blit(lbl, lbl.get_rect(center=ACO_SCREEN_POS))
+
+    if near_aco:
+        draw_interact_prompt(surface, "말 걸기  [E]",
+                             ACO_SCREEN_POS[0], ACO_SCREEN_POS[1])
 
     player.draw(surface, int(player.hina_sx), int(player.hina_sy), current_time)
 
-    # ── 디버그: 선도부실 이동 가능 구역 (파란색) ──
+    if mission:
+        draw_mission(surface, mission)
+
     if len(_PREFECT_WALK_POLY) >= 2:
         pygame.draw.polygon(surface, (0, 200, 255), _PREFECT_WALK_POLY, 2)
         for pt in _PREFECT_WALK_POLY:
             pygame.draw.circle(surface, (0, 255, 200), pt, 5)
-    # 마우스 좌표 표시 (범위 조정용)
     mx, my = pygame.mouse.get_pos()
     dbg = font_mini.render(f"mouse: ({mx}, {my})", True, (255, 255, 0))
     surface.blit(dbg, (10, 40))
@@ -1149,9 +1201,16 @@ opening  = OpeningNarration(OPENING_LINES)
 hina_dlg = DialogSystem(HINA_ROOM_DIALOG)
 
 mid_dlg: DialogSystem | None = None
+aco_dlg: DialogSystem | None = None
+aco_talked   = False
+bed_used     = False
 
-fadeout_start   = 0
+fadeout_start    = 0
 FADEOUT_DURATION = 1200
+
+# ★ FIX 3: 아코 대화 완료 후 전투맵 전환용 페이드
+prefect_fadeout_start    = 0
+PREFECT_FADEOUT_DURATION = 1200
 
 e_prev = False
 
@@ -1188,11 +1247,22 @@ while running:
                     mid_dlg.on_space()
                     if mid_dlg.finished:
                         if mid_dlg.lines is BED_SLEEP_DIALOG:
+                            bed_used      = True
                             game_state    = "fadeout"
                             fadeout_start = current_time
                         else:
                             game_state = "hina_room"
                             mid_dlg    = None
+
+            elif event.key == pygame.K_SPACE and game_state == "prefect_aco_dlg":
+                if aco_dlg:
+                    aco_dlg.on_space()
+                    if aco_dlg.finished:
+                        # ★ FIX 3: 대화 완료 → 페이드 아웃 후 전투맵으로
+                        aco_talked              = True
+                        game_state              = "prefect_fadeout"
+                        prefect_fadeout_start   = current_time
+                        aco_dlg                 = None
 
     # ── 타이틀 ──
     if game_state == "title":
@@ -1230,15 +1300,24 @@ while running:
                                    player.hina_sy - WARDROBE_POS[1])
         dist_bed      = math.hypot(player.hina_sx - BED_POS[0],
                                    player.hina_sy - BED_POS[1])
-        near_wardrobe = dist_wardrobe < WARDROBE_RADIUS
-        near_bed      = dist_bed      < BED_RADIUS
 
-        near_wardrobe = near_wardrobe and (player.costume == "uniform")
+        # 옷장: 제복 상태일 때만
+        near_wardrobe = (dist_wardrobe < WARDROBE_RADIUS) and (player.costume == "uniform")
 
-        mission_txt = MISSION_HINA_ROOM if player.costume == "uniform" else None
+        # ★ FIX 2: 침대는 항상 가까이 가면 반응 (bed_used 아직 안 됐을 때)
+        # 제복 상태 → BED_UNIFORM_DIALOG, 수면복 상태 → BED_SLEEP_DIALOG
+        near_bed = (dist_bed < BED_RADIUS) and not bed_used
+
+        # 미션 결정
+        if player.costume == "uniform":
+            mission_txt = MISSION_HINA_ROOM
+        elif not bed_used:
+            mission_txt = MISSION_SLEEP
+        else:
+            mission_txt = None
 
         if e_now and not e_prev:
-            if near_wardrobe and player.costume == "uniform":
+            if near_wardrobe:
                 player.costume = "sleep"
             elif near_bed:
                 if player.costume == "uniform":
@@ -1254,7 +1333,6 @@ while running:
                        near_wardrobe=near_wardrobe,
                        near_bed=near_bed,
                        mission=mission_txt)
-        # ── 디버그: 마우스 좌표 표시 ──
         mx, my = pygame.mouse.get_pos()
         dbg = font_mini.render(f"mouse: ({mx}, {my})", True, (255, 255, 0))
         screen.blit(dbg, (10, 40))
@@ -1277,7 +1355,7 @@ while running:
         clock.tick(60)
         continue
 
-    # ── 페이드 아웃 ──
+    # ── 히나 방 → 선도부실 페이드 아웃 ──
     if game_state == "fadeout":
         elapsed = current_time - fadeout_start
         alpha   = min(255, int(255 * elapsed / FADEOUT_DURATION))
@@ -1299,13 +1377,78 @@ while running:
     # ── 선도부실 ──
     if game_state == "prefect_room":
         keys = pygame.key.get_pressed()
-        player.update_prefect_room(keys, current_time)   # ★ 선도부실 전용 함수
-        draw_prefect_room(screen, player, current_time)
+        player.update_prefect_room(keys, current_time)
+        e_now = keys[pygame.K_e]
+
+        dist_aco = math.hypot(player.hina_sx - ACO_SCREEN_POS[0],
+                              player.hina_sy - ACO_SCREEN_POS[1])
+        near_aco = dist_aco < ACO_INTERACT_RADIUS and not aco_talked
+
+        if e_now and not e_prev and near_aco:
+            aco_dlg    = DialogSystem(ACO_DIALOG)
+            game_state = "prefect_aco_dlg"
+
+        e_prev = e_now
+
+        mission_txt = None if aco_talked else MISSION_PREFECT
+
+        draw_prefect_room(screen, player, current_time,
+                          near_aco=near_aco,
+                          mission=mission_txt)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
+
+    # ── 선도부실 아코 대화 ──
+    if game_state == "prefect_aco_dlg":
+        if aco_dlg:
+            aco_dlg.update(current_time)
+        screen.fill((0, 0, 0))
+        if prefect_room_img:
+            screen.blit(prefect_room_img, prefect_room_rect)
+        if aco_img:
+            ax = ACO_SCREEN_POS[0] - ACO_DRAW_W // 2
+            ay = ACO_SCREEN_POS[1] - ACO_DRAW_H // 2
+            screen.blit(aco_img, (ax, ay))
+        else:
+            pygame.draw.circle(screen, (180, 120, 220), ACO_SCREEN_POS, 28)
+        player.draw(screen, int(player.hina_sx), int(player.hina_sy), current_time)
+        if aco_dlg:
+            aco_dlg.draw(screen, current_time)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
+
+    # ★ FIX 3: 선도부실 → 전투맵 페이드 아웃
+    if game_state == "prefect_fadeout":
+        elapsed = current_time - prefect_fadeout_start
+        alpha   = min(255, int(255 * elapsed / PREFECT_FADEOUT_DURATION))
+        screen.fill((0, 0, 0))
+        if prefect_room_img:
+            screen.blit(prefect_room_img, prefect_room_rect)
+        if aco_img:
+            ax = ACO_SCREEN_POS[0] - ACO_DRAW_W // 2
+            ay = ACO_SCREEN_POS[1] - ACO_DRAW_H // 2
+            screen.blit(aco_img, (ax, ay))
+        player.draw(screen, int(player.hina_sx), int(player.hina_sy), current_time)
+        draw_fadeout(screen, alpha)
+        if elapsed >= PREFECT_FADEOUT_DURATION:
+            # 전투맵으로 전환 — 플레이어 월드 좌표를 방 1 중앙으로 초기화
+            game_state = "battle"
+            player.world_x = rooms[0].world_x + rooms[0].width  // 2
+            player.world_y = rooms[0].world_y + rooms[0].height // 2
+            player.costume = "uniform"
+            play_bgm(1)
+            battle_bgm_started = True
         pygame.display.flip()
         clock.tick(60)
         continue
 
     # ── 전투 맵 ──
+    if game_state != "battle":
+        # 혹시 모를 미정의 상태면 battle로 강제 이동
+        game_state = "battle"
+
     if not battle_bgm_started:
         play_bgm(1)
         battle_bgm_started = True
