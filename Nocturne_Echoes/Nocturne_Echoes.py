@@ -136,7 +136,7 @@ if os.path.exists(hina_move_path):
     sheet = load_image_colorkey(hina_move_path)
     for i in range(SPRITE_FRAMES):
         frame_raw = sheet.subsurface(pygame.Rect(i * SPRITE_FRAME_W, 0, SPRITE_FRAME_W, SPRITE_FRAME_H))
-        sc = pygame.transform.smoothscale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
+        sc = pygame.transform.scale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
         sc.set_colorkey((0, 0, 0))
         sprite_frames_right.append(sc)
         fl = pygame.transform.flip(sc, True, False)
@@ -151,7 +151,7 @@ if os.path.exists(hina_sleep_path):
     sleep_sheet = load_image_colorkey(hina_sleep_path)
     for i in range(SPRITE_FRAMES):
         frame_raw = sleep_sheet.subsurface(pygame.Rect(i * SPRITE_FRAME_W, 0, SPRITE_FRAME_W, SPRITE_FRAME_H))
-        sc = pygame.transform.smoothscale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
+        sc = pygame.transform.scale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
         sc.set_colorkey((0, 0, 0))
         sleep_frames_right.append(sc)
         fl = pygame.transform.flip(sc, True, False)
