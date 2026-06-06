@@ -94,7 +94,7 @@ if os.path.exists(prefect_room_path):
 # ★ FIX 1: convert_alpha() + colorkey (0,0,0) 적용해서 검은 배경 제거
 # 원본 비율 190(가로) x 250(세로), 히나와 동일한 높이(int(64*SCALE)) 기준으로 가로 맞춤
 _AKO_ORIG_W, _AKO_ORIG_H = 190, 250
-_AKO_TARGET_H = int(80 * SCALE)
+_AKO_TARGET_H = int(64 * SCALE)
 _AKO_TARGET_W = int(_AKO_TARGET_H * _AKO_ORIG_W / _AKO_ORIG_H)
 ACO_DRAW_W = _AKO_TARGET_W
 ACO_DRAW_H = _AKO_TARGET_H
@@ -136,7 +136,7 @@ if os.path.exists(hina_move_path):
     sheet = load_image_colorkey(hina_move_path)
     for i in range(SPRITE_FRAMES):
         frame_raw = sheet.subsurface(pygame.Rect(i * SPRITE_FRAME_W, 0, SPRITE_FRAME_W, SPRITE_FRAME_H))
-        sc = pygame.transform.scale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
+        sc = pygame.transform.smoothscale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
         sc.set_colorkey((0, 0, 0))
         sprite_frames_right.append(sc)
         fl = pygame.transform.flip(sc, True, False)
@@ -151,7 +151,7 @@ if os.path.exists(hina_sleep_path):
     sleep_sheet = load_image_colorkey(hina_sleep_path)
     for i in range(SPRITE_FRAMES):
         frame_raw = sleep_sheet.subsurface(pygame.Rect(i * SPRITE_FRAME_W, 0, SPRITE_FRAME_W, SPRITE_FRAME_H))
-        sc = pygame.transform.scale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
+        sc = pygame.transform.smoothscale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
         sc.set_colorkey((0, 0, 0))
         sleep_frames_right.append(sc)
         fl = pygame.transform.flip(sc, True, False)
@@ -1214,6 +1214,111 @@ PREFECT_FADEOUT_DURATION = 1200
 
 e_prev = False
 
+# ─────────────────────────────────────────────
+# F10 디버그 메뉴
+# ─────────────────────────────────────────────
+DEBUG_STAGES = [
+    ("1. 타이틀",          "title"),
+    ("2. 오프닝 나레이션",  "intro"),
+    ("3. 히나 방 대화",    "hina_dialog"),
+    ("4. 히나 방 (자유)",  "hina_room"),
+    ("5. 선도부실",        "prefect_room"),
+    ("6. 전투 맵",         "battle"),
+]
+debug_menu_open  = False
+debug_cursor     = 0
+font_debug       = _make_font(18, bold=True)
+font_debug_title = _make_font(22, bold=True)
+
+def _jump_to_stage(target_state):
+    global game_state, hina_bgm_started, battle_bgm_started
+    global bed_used, aco_talked, mid_dlg, aco_dlg
+    global fadeout_start, prefect_fadeout_start
+
+    game_state = target_state
+
+    if target_state == "title":
+        pygame.mixer.music.stop()
+        hina_bgm_started   = False
+        battle_bgm_started = False
+
+    elif target_state == "intro":
+        pygame.mixer.music.stop()
+        hina_bgm_started   = False
+        battle_bgm_started = False
+        opening.line_idx  = 0
+        opening.char_idx  = 0
+        opening.last_char = 0
+        opening.finished  = False
+
+    elif target_state == "hina_dialog":
+        if not hina_bgm_started:
+            play_bgm(0)
+            hina_bgm_started = True
+        hina_dlg.idx       = 0
+        hina_dlg.char_idx  = 0
+        hina_dlg.last_char = 0
+        hina_dlg.finished  = False
+
+    elif target_state == "hina_room":
+        if not hina_bgm_started:
+            play_bgm(0)
+            hina_bgm_started = True
+        player.hina_sx = 500.0
+        player.hina_sy = 560.0
+        player.costume = "uniform"
+        bed_used = False
+        mid_dlg  = None
+
+    elif target_state == "prefect_room":
+        play_funky_road()
+        player.hina_sx = 500.0
+        player.hina_sy = 560.0
+        player.costume = "uniform"
+        aco_talked = False
+        aco_dlg    = None
+
+    elif target_state == "battle":
+        if not battle_bgm_started:
+            play_bgm(1)
+            battle_bgm_started = True
+        player.world_x = rooms[0].world_x + rooms[0].width  // 2
+        player.world_y = rooms[0].world_y + rooms[0].height // 2
+        player.costume = "uniform"
+
+def _draw_debug_menu(surface, cursor):
+    ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    ov.fill((0, 0, 0, 190))
+    surface.blit(ov, (0, 0))
+
+    panel_w = 380
+    panel_h = 60 + len(DEBUG_STAGES) * 44 + 20
+    px = WIDTH  // 2 - panel_w // 2
+    py = HEIGHT // 2 - panel_h // 2
+
+    panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+    panel.fill((12, 18, 35, 240))
+    pygame.draw.rect(panel, (80, 120, 200, 200), (0, 0, panel_w, panel_h), 2, border_radius=8)
+    surface.blit(panel, (px, py))
+
+    title_s = font_debug_title.render("[ DEBUG  —  STAGE SELECT ]", True, (130, 180, 255))
+    surface.blit(title_s, title_s.get_rect(centerx=px + panel_w // 2, top=py + 14))
+
+    for i, (label, _) in enumerate(DEBUG_STAGES):
+        item_y = py + 52 + i * 44
+        is_sel = (i == cursor)
+        if is_sel:
+            sel_rect = pygame.Rect(px + 10, item_y - 4, panel_w - 20, 36)
+            pygame.draw.rect(surface, (50, 90, 200, 180), sel_rect, border_radius=5)
+            pygame.draw.rect(surface, (100, 160, 255, 220), sel_rect, 1, border_radius=5)
+        color  = (255, 240, 100) if is_sel else (190, 200, 220)
+        prefix = "▶  " if is_sel else "    "
+        txt = font_debug.render(prefix + label, True, color)
+        surface.blit(txt, (px + 22, item_y))
+
+    hint = font_debug.render("↑↓ 이동   Enter 선택   F10 닫기", True, (100, 120, 160))
+    surface.blit(hint, hint.get_rect(centerx=px + panel_w // 2, top=py + panel_h - 26))
+
 while running:
     current_time = pygame.time.get_ticks()
 
@@ -1222,7 +1327,27 @@ while running:
             running = False
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                running = False
+                if debug_menu_open:
+                    debug_menu_open = False
+                else:
+                    running = False
+
+            # ── F10: 디버그 메뉴 토글 ──
+            if event.key == pygame.K_F10:
+                debug_menu_open = not debug_menu_open
+                debug_cursor    = 0
+
+            # ── 디버그 메뉴가 열려 있으면 다른 키 입력 가로챔 ──
+            if debug_menu_open:
+                if event.key == pygame.K_UP:
+                    debug_cursor = (debug_cursor - 1) % len(DEBUG_STAGES)
+                elif event.key == pygame.K_DOWN:
+                    debug_cursor = (debug_cursor + 1) % len(DEBUG_STAGES)
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    _jump_to_stage(DEBUG_STAGES[debug_cursor][1])
+                    debug_menu_open = False
+                # 메뉴 열린 동안 Space 등 다른 입력은 아래로 흘러가지 않도록 continue
+                continue
 
             if event.key == pygame.K_SPACE and game_state == "title":
                 game_state = "intro"
@@ -1267,6 +1392,8 @@ while running:
     # ── 타이틀 ──
     if game_state == "title":
         draw_title_screen(screen, current_time)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1275,6 +1402,8 @@ while running:
     if game_state == "intro":
         opening.update(current_time)
         opening.draw(screen, current_time)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1286,6 +1415,8 @@ while running:
         if hina_room_img:
             screen.blit(hina_room_img, hina_room_rect)
         hina_dlg.draw(screen, current_time)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1337,6 +1468,8 @@ while running:
         dbg = font_mini.render(f"mouse: ({mx}, {my})", True, (255, 255, 0))
         screen.blit(dbg, (10, 40))
 
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1351,6 +1484,8 @@ while running:
         player.draw(screen, int(player.hina_sx), int(player.hina_sy), current_time)
         if mid_dlg:
             mid_dlg.draw(screen, current_time)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1370,6 +1505,8 @@ while running:
             player.hina_sy  = 560.0
             player.costume  = "uniform"
             play_funky_road()
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1395,6 +1532,8 @@ while running:
         draw_prefect_room(screen, player, current_time,
                           near_aco=near_aco,
                           mission=mission_txt)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1415,6 +1554,8 @@ while running:
         player.draw(screen, int(player.hina_sx), int(player.hina_sy), current_time)
         if aco_dlg:
             aco_dlg.draw(screen, current_time)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1440,6 +1581,8 @@ while running:
             player.costume = "uniform"
             play_bgm(1)
             battle_bgm_started = True
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
         pygame.display.flip()
         clock.tick(60)
         continue
@@ -1532,6 +1675,8 @@ while running:
     mm_y = 20
     draw_minimap(screen, rooms, id_map, mini_connections, player.current_room_id, mm_x, mm_y)
 
+    if debug_menu_open:
+        _draw_debug_menu(screen, debug_cursor)
     pygame.display.flip()
     clock.tick(60)
 
