@@ -47,7 +47,7 @@ WALL_COLOR        = (60,  60,  65)
 FLOOR_COLOR_A     = (35,  35,  40)
 FLOOR_COLOR_B     = (45,  45,  52)
 ENEMY_COLOR       = (255, 80,  80)
-BULLET_COLOR      = (255, 220, 80)
+BULLET_COLOR      = (200, 100, 255)
 DOOR_CLOSED_COLOR = (200, 40,  40)
 DOOR_FRAME_COLOR  = (100, 100, 110)
 
@@ -77,7 +77,7 @@ hina_room_path = os.path.join(ASSETS_DIR, "hina_room.png")
 if os.path.exists(hina_room_path):
     _raw_room  = pygame.image.load(hina_room_path).convert()
     _room_size = min(HEIGHT, WIDTH)
-    hina_room_img  = pygame.transform.smoothscale(_raw_room, (_room_size, _room_size))
+    hina_room_img  = pygame.transform.scale(_raw_room, (_room_size, _room_size))
     hina_room_rect = hina_room_img.get_rect(center=(WIDTH // 2, HEIGHT // 2))
 
 # ── 선도부실 이미지 (정사각형, 히나 방과 동일 사이즈) ──
@@ -87,7 +87,7 @@ prefect_room_path = os.path.join(ASSETS_DIR, "prefect_room.png")
 if os.path.exists(prefect_room_path):
     _raw_pr = pygame.image.load(prefect_room_path).convert()
     _room_size_pr = min(HEIGHT, WIDTH)
-    prefect_room_img  = pygame.transform.smoothscale(_raw_pr, (_room_size_pr, _room_size_pr))
+    prefect_room_img  = pygame.transform.scale(_raw_pr, (_room_size_pr, _room_size_pr))
     prefect_room_rect = prefect_room_img.get_rect(center=(WIDTH // 2, HEIGHT // 2))
 
 # ── aco 캐릭터 이미지 로드 ──
@@ -105,7 +105,7 @@ aco_img_path = os.path.join(ASSETS_DIR, "ako.png")
 if os.path.exists(aco_img_path):
     try:
         _aco_raw = pygame.image.load(aco_img_path).convert_alpha()
-        _aco_scaled = pygame.transform.smoothscale(_aco_raw, (ACO_DRAW_W, ACO_DRAW_H))
+        _aco_scaled = pygame.transform.scale(_aco_raw, (ACO_DRAW_W, ACO_DRAW_H))
         _aco_scaled.set_colorkey((0, 0, 0))
         aco_img = _aco_scaled
     except Exception as e:
@@ -136,7 +136,7 @@ if os.path.exists(hina_move_path):
     sheet = load_image_colorkey(hina_move_path)
     for i in range(SPRITE_FRAMES):
         frame_raw = sheet.subsurface(pygame.Rect(i * SPRITE_FRAME_W, 0, SPRITE_FRAME_W, SPRITE_FRAME_H))
-        sc = pygame.transform.smoothscale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
+        sc = pygame.transform.scale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
         sc.set_colorkey((0, 0, 0))
         sprite_frames_right.append(sc)
         fl = pygame.transform.flip(sc, True, False)
@@ -151,7 +151,7 @@ if os.path.exists(hina_sleep_path):
     sleep_sheet = load_image_colorkey(hina_sleep_path)
     for i in range(SPRITE_FRAMES):
         frame_raw = sleep_sheet.subsurface(pygame.Rect(i * SPRITE_FRAME_W, 0, SPRITE_FRAME_W, SPRITE_FRAME_H))
-        sc = pygame.transform.smoothscale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
+        sc = pygame.transform.scale(frame_raw, (PLAYER_DRAW_SIZE, PLAYER_DRAW_SIZE))
         sc.set_colorkey((0, 0, 0))
         sleep_frames_right.append(sc)
         fl = pygame.transform.flip(sc, True, False)
@@ -164,7 +164,7 @@ gun_img_right = None
 gun_img_path  = os.path.join(ASSETS_DIR, "hina_gun.png")
 if os.path.exists(gun_img_path):
     gun_raw       = load_image_colorkey(gun_img_path)
-    gun_img_right = pygame.transform.smoothscale(gun_raw, (GUN_DRAW_SIZE, GUN_DRAW_SIZE))
+    gun_img_right = pygame.transform.scale(gun_raw, (GUN_DRAW_SIZE, GUN_DRAW_SIZE))
     gun_img_right.set_colorkey((0, 0, 0))
 
 gun_rotated_cache_r = {}
@@ -186,7 +186,7 @@ muzzle_flash_cache_l = {}
 shot_img_path = os.path.join(ASSETS_DIR, "shot.png")
 if os.path.exists(shot_img_path):
     shot_raw    = pygame.image.load(shot_img_path).convert_alpha()
-    shot_scaled = pygame.transform.smoothscale(shot_raw, (MUZZLE_DRAW_SIZE, MUZZLE_DRAW_SIZE))
+    shot_scaled = pygame.transform.scale(shot_raw, (MUZZLE_DRAW_SIZE, MUZZLE_DRAW_SIZE))
     for deg in range(360):
         muzzle_flash_cache_r[deg] = pygame.transform.rotate(shot_scaled, -deg)
         muzzle_flash_cache_l[deg] = pygame.transform.rotate(
@@ -208,7 +208,7 @@ piano_img_path = os.path.join(ASSETS_DIR, "piano.png")
 if os.path.exists(piano_img_path):
     try:
         piano_raw = pygame.image.load(piano_img_path).convert_alpha()
-        piano_img = pygame.transform.smoothscale(piano_raw, (PIANO_DRAW_W, PIANO_DRAW_H))
+        piano_img = pygame.transform.scale(piano_raw, (PIANO_DRAW_W, PIANO_DRAW_H))
     except Exception as e:
         print(f"[WARN] piano 이미지 로드 실패: {e}")
 
@@ -291,137 +291,87 @@ def _point_in_prefect_walkzone(px, py):
     return _point_in_poly(px, py, _PREFECT_WALK_POLY)
 
 # ─────────────────────────────────────────────
-# 3. 방(Room)
+# 3. 전투 맵 워크존 (이미지 좌표 기준, 1000x700 화면)
 # ─────────────────────────────────────────────
-ROOM_SIZE  = int(1000 * SCALE)
-GRID_STEP  = int((1000 + 300) * SCALE)
-CORRIDOR_W = int(200 * SCALE)
+# 이미지를 1000x700으로 스케일한 기준 좌표
+# 수정하려면 아래 폴리곤 꼭짓점을 조정하세요
+# 디버그 모드(F10 → 전투맵)에서 초록 폴리곤으로 표시됩니다
 
-class Room:
-    def __init__(self, room_id, grid_x, grid_y):
-        self.id       = room_id
-        self.grid_pos = (grid_x, grid_y)
-        self.width    = ROOM_SIZE
-        self.height   = ROOM_SIZE
-        self.world_x  = grid_x * GRID_STEP
-        self.world_y  = grid_y * GRID_STEP
-        self.rect     = pygame.Rect(self.world_x, self.world_y, self.width, self.height)
-        self.is_cleared  = False
-        self.has_enemies = False
-        self.doors       = []
-        self.floor_surf  = None
+# ── 배틀맵 스케일 상수 (여기서 배율 조정) ──
+BATTLE_MAP_SCALE = 2.5        # 이미지 원본 대비 배율 (변경 시 이 숫자만 수정)
+BATTLE_MAP_W = int(WIDTH  * BATTLE_MAP_SCALE)   # 월드 가로 (2500)
+BATTLE_MAP_H = int(HEIGHT * BATTLE_MAP_SCALE)   # 월드 세로 (1750)
 
-    def build_doors(self, connected_ids, all_rooms):
-        self.doors = []
-        id_to_room = {r.id: r for r in all_rooms}
-        for oid in connected_ids:
-            other = id_to_room[oid]
-            dx = other.grid_pos[0] - self.grid_pos[0]
-            dy = other.grid_pos[1] - self.grid_pos[1]
-            thick = int(24 * SCALE)
-            dlen  = CORRIDOR_W
-            if dx == 1:
-                self.doors.append({'rect': pygame.Rect(
-                    self.world_x + self.width - thick,
-                    self.world_y + (self.height - dlen) // 2, thick, dlen), 'axis': 'v'})
-            elif dx == -1:
-                self.doors.append({'rect': pygame.Rect(
-                    self.world_x,
-                    self.world_y + (self.height - dlen) // 2, thick, dlen), 'axis': 'v'})
-            elif dy == 1:
-                self.doors.append({'rect': pygame.Rect(
-                    self.world_x + (self.width - dlen) // 2,
-                    self.world_y + self.height - thick, dlen, thick), 'axis': 'h'})
-            elif dy == -1:
-                self.doors.append({'rect': pygame.Rect(
-                    self.world_x + (self.width - dlen) // 2,
-                    self.world_y, dlen, thick), 'axis': 'h'})
+# ── 전투 배경 이미지 ──
+battle_bg_img  = None
+battle_bg_path = os.path.join(ASSETS_DIR, "gehenna.png")
+if os.path.exists(battle_bg_path):
+    try:
+        _bbg_raw      = pygame.image.load(battle_bg_path).convert()
+        battle_bg_img = pygame.transform.scale(_bbg_raw, (BATTLE_MAP_W, BATTLE_MAP_H))
+    except Exception as e:
+        print(f"[WARN] battle_map 로드 실패: {e}")
 
-    def build_floor(self):
-        surf = pygame.Surface((self.width, self.height))
-        bc = self.world_x // CHECKER_SIZE
-        br = self.world_y // CHECKER_SIZE
-        cols = self.width  // CHECKER_SIZE + 1
-        rows = self.height // CHECKER_SIZE + 1
-        for row in range(rows):
-            for col in range(cols):
-                color = FLOOR_COLOR_A if (bc + col + br + row) % 2 == 0 else FLOOR_COLOR_B
-                pygame.draw.rect(surf, color,
-                                 (col * CHECKER_SIZE, row * CHECKER_SIZE, CHECKER_SIZE, CHECKER_SIZE))
-        self.floor_surf = surf
+_S = BATTLE_MAP_SCALE  # 좌표 곱셈용 단축 변수
 
-# ─────────────────────────────────────────────
-# 4. 방·통로 생성
-# ─────────────────────────────────────────────
-rooms = [Room(1,0,0), Room(2,1,0), Room(3,0,1), Room(4,0,2)]
-connections = {1:[2,3], 2:[1], 3:[1,4], 4:[3]}
-for room in rooms:
-    room.build_doors(connections[room.id], rooms)
-    room.build_floor()
+# 전체 이동 가능 구역 — 원본 이미지 좌표 × _S
+# 수정 시 숫자는 1000x700 기준 원본 좌표, _S 곱해서 실제 월드 좌표가 됩니다
+def _si(v): return int(v * _S)  # 스케일 곱하고 int 변환 헬퍼
 
-def make_corridor(r1, r2):
-    dx = r2.grid_pos[0] - r1.grid_pos[0]
-    dy = r2.grid_pos[1] - r1.grid_pos[1]
-    if dx == 1:
-        return pygame.Rect(r1.world_x + r1.width,
-                           r1.world_y + (r1.height - CORRIDOR_W) // 2,
-                           GRID_STEP - ROOM_SIZE, CORRIDOR_W)
-    elif dy == 1:
-        return pygame.Rect(r1.world_x + (r1.width - CORRIDOR_W) // 2,
-                           r1.world_y + r1.height,
-                           CORRIDOR_W, GRID_STEP - ROOM_SIZE)
-    return None
+_BATTLE_WALK_POLYS = [
+    # 중앙 홀 (메인 통로)
+    [(_si(310), _si(28)),  (_si(740), _si(28)),  (_si(740), _si(672)), (_si(310), _si(672))],
+    # 좌상 교실
+    [(_si(28),  _si(28)),  (_si(285), _si(28)),  (_si(285), _si(262)), (_si(28),  _si(262))],
+    # 우상 휴게실
+    [(_si(757), _si(28)),  (_si(980), _si(28)),  (_si(980), _si(262)), (_si(757), _si(262))],
+    # 좌중 창고
+    [(_si(28),  _si(283)), (_si(285), _si(283)), (_si(285), _si(465)), (_si(28),  _si(465))],
+    # 우중 교무실
+    [(_si(757), _si(283)), (_si(980), _si(283)), (_si(980), _si(465)), (_si(757), _si(465))],
+    # 좌하 식당
+    [(_si(28),  _si(487)), (_si(285), _si(487)), (_si(285), _si(672)), (_si(28),  _si(672))],
+    # 우하 입구 (히나 시작 위치)
+    [(_si(757), _si(487)), (_si(980), _si(487)), (_si(980), _si(672)), (_si(757), _si(672))],
+]
 
-id_map    = {r.id: r for r in rooms}
-corridors = []
-seen      = set()
-for sid, eids in connections.items():
-    for eid in eids:
-        key = tuple(sorted((sid, eid)))
-        if key not in seen:
-            seen.add(key)
-            r1, r2 = id_map[sid], id_map[eid]
-            if (r1.grid_pos[0]+r1.grid_pos[1]) > (r2.grid_pos[0]+r2.grid_pos[1]):
-                r1, r2 = r2, r1
-            c = make_corridor(r1, r2)
-            if c: corridors.append(c)
+# 각 방 ↔ 중앙 홀 연결 통로
+_BATTLE_CORRIDOR_RECTS = [
+    pygame.Rect(_si(285), _si(80),  _si(30), _si(120)),   # 좌상
+    pygame.Rect(_si(740), _si(80),  _si(30), _si(120)),   # 우상
+    pygame.Rect(_si(285), _si(310), _si(30), _si(100)),   # 좌중
+    pygame.Rect(_si(740), _si(310), _si(30), _si(100)),   # 우중
+    pygame.Rect(_si(285), _si(530), _si(30), _si(100)),   # 좌하
+    pygame.Rect(_si(740), _si(530), _si(30), _si(100)),   # 우하
+]
 
-mini_connections = [(1,2),(1,3),(3,4)]
+def _point_in_battle_walkzone(px, py):
+    for poly in _BATTLE_WALK_POLYS:
+        if _point_in_poly(px, py, poly):
+            return True
+    for rect in _BATTLE_CORRIDOR_RECTS:
+        if rect.collidepoint(int(px), int(py)):
+            return True
+    return False
 
-start_room        = id_map[1]
-PIANO_MARGIN      = int(80 * SCALE)
-PIANO_WORLD_X     = start_room.world_x + start_room.width - PIANO_DRAW_W - PIANO_MARGIN
-PIANO_WORLD_Y     = start_room.world_y + PIANO_MARGIN
-PIANO_INTERACT_RADIUS = int(120 * SCALE)
+# 히나 전투맵 시작 위치 (우하단 문 앞)
+BATTLE_START_X = 870.0 * BATTLE_MAP_SCALE
+BATTLE_START_Y = 620.0 * BATTLE_MAP_SCALE
+
+# 미니맵용 더미 (draw_minimap 호환 유지)
+rooms            = []
+id_map           = {}
+corridors        = []
+mini_connections = []
 
 # ─────────────────────────────────────────────
-# 5. 문 그리기
+# 4. 방·통로 생성  ← 전투맵 이미지로 대체되어 비워둠
 # ─────────────────────────────────────────────
-def draw_door(surface, door_dict, camera_x, camera_y):
-    r  = door_dict['rect']
-    sx, sy, sw, sh = r.x + camera_x, r.y + camera_y, r.width, r.height
-    fp = int(8 * SCALE)
-    pygame.draw.rect(surface, DOOR_FRAME_COLOR,
-                     pygame.Rect(sx-fp, sy-fp, sw+fp*2, sh+fp*2), border_radius=4)
-    pygame.draw.rect(surface, DOOR_CLOSED_COLOR, pygame.Rect(sx, sy, sw, sh), border_radius=3)
-    knob_r = int(6 * SCALE)
-    line_w = int(3 * SCALE)
-    if door_dict['axis'] == 'v':
-        mx = int(sx + sw // 2)
-        pygame.draw.line(surface, (255,255,255), (mx, int(sy+6)), (mx, int(sy+sh-6)), line_w)
-        pygame.draw.circle(surface, (220,220,220), (mx, int(sy+sh//2)), knob_r)
-    else:
-        my = int(sy + sh // 2)
-        pygame.draw.line(surface, (255,255,255), (int(sx+6), my), (int(sx+sw-6), my), line_w)
-        pygame.draw.circle(surface, (220,220,220), (int(sx+sw//2), my), knob_r)
-    lx = int(sx + sw // 2)
-    ly = int(sy + sh // 2) - int(10 * SCALE)
-    lock_w, lock_h = int(14 * SCALE), int(10 * SCALE)
-    pygame.draw.rect(surface, (255,200,0),
-                     pygame.Rect(lx - lock_w//2, ly + lock_h//2, lock_w, lock_h), border_radius=2)
-    pygame.draw.arc(surface, (255,200,0),
-                    pygame.Rect(lx - lock_w//2 + 1, ly - lock_h//2, lock_w - 2, lock_h + 4),
-                    0, math.pi, int(3 * SCALE))
+# (기존 Room/corridor 시스템 제거)
+
+# ─────────────────────────────────────────────
+# 5. 문 그리기  ← 전투맵에서는 사용 안 함
+# ─────────────────────────────────────────────
 
 # ─────────────────────────────────────────────
 # 6. 플레이어
@@ -429,19 +379,19 @@ def draw_door(surface, door_dict, camera_x, camera_y):
 GUN_VISIBLE_MS    = 300
 BURST_COUNT       = 4
 BURST_INTERVAL_MS = 50
-BURST_COOLDOWN_MS = 500
+BURST_COOLDOWN_MS = 700
 
 class Player:
     def __init__(self):
-        self.world_x = rooms[0].world_x + rooms[0].width  // 2
-        self.world_y = rooms[0].world_y + rooms[0].height // 2
+        self.world_x = BATTLE_START_X
+        self.world_y = BATTLE_START_Y
         self.radius  = int(20 * SCALE)
 
-        self.speed         = 6 * SCALE
-        self.attack_range  = int(500 * SCALE)
-        self.bullet_speed  = 18 * SCALE
-        self.bullet_range  = int(800 * SCALE)
-        self.bullet_radius = int(6 * SCALE)
+        self.speed         = 5 * SCALE
+        self.attack_range  = int(300 * SCALE)
+        self.bullet_speed  = 14 * SCALE
+        self.bullet_range  = int(500 * SCALE)
+        self.bullet_radius = int(5 * SCALE)
 
         self.burst_shots_fired = 0
         self.last_shot_time    = -9999
@@ -550,24 +500,14 @@ class Player:
         nx = self.world_x + dx * self.speed
         ny = self.world_y + dy * self.speed
 
-        active_room = None
-        for room in rooms:
-            if room.rect.collidepoint(self.world_x, self.world_y):
-                active_room = room
-                self.current_room_id = room.id
-                break
-
-        in_room     = any(r.rect.collidepoint(nx, ny) for r in rooms)
-        in_corridor = any(c.collidepoint(nx, ny) for c in corridors)
-
-        can_exit = True
-        if active_room and not active_room.is_cleared and active_room.has_enemies:
-            if active_room.rect.collidepoint(self.world_x, self.world_y):
-                if not active_room.rect.collidepoint(nx, ny):
-                    can_exit = False
-
-        if (in_room or in_corridor) and can_exit:
+        # 전투 워크존 기반 이동 (카메라 오프셋 없음 — world == screen)
+        if _point_in_battle_walkzone(nx, ny):
             self.world_x, self.world_y = nx, ny
+        else:
+            if _point_in_battle_walkzone(nx, self.world_y):
+                self.world_x = nx
+            elif _point_in_battle_walkzone(self.world_x, ny):
+                self.world_y = ny
 
         if self.is_moving and sprite_frames_right:
             if current_time - self.anim_timer > self.anim_interval:
@@ -579,13 +519,12 @@ class Player:
         self.target_enemy = None
         min_dist = self.attack_range
         for enemy in enemies:
-            if active_room and active_room.rect.collidepoint(enemy.world_x, enemy.world_y):
-                ddx = enemy.world_x - self.world_x
-                ddy = enemy.world_y - self.world_y
-                d_sq = ddx*ddx + ddy*ddy
-                if d_sq < min_dist * min_dist:
-                    min_dist = math.sqrt(d_sq)
-                    self.target_enemy = enemy
+            ddx = enemy.world_x - self.world_x
+            ddy = enemy.world_y - self.world_y
+            d_sq = ddx*ddx + ddy*ddy
+            if d_sq < min_dist * min_dist:
+                min_dist = math.sqrt(d_sq)
+                self.target_enemy = enemy
 
         if self.target_enemy:
             self.gun_angle = math.atan2(
@@ -669,15 +608,25 @@ class Bullet:
 # 8. 객체 생성 및 적 배치
 # ─────────────────────────────────────────────
 player  = Player()
+player.world_x = BATTLE_START_X
+player.world_y = BATTLE_START_Y
+
+# 전투맵 적 배치 — 각 방 안에 랜덤 배치
 enemies = []
-_mg = int(80 * SCALE)
-for room in rooms:
-    if room.id != 1:
-        room.has_enemies = True
-        for _ in range(random.randint(3, 5)):
-            ex = random.randint(room.world_x + _mg, room.world_x + room.width  - _mg)
-            ey = random.randint(room.world_y + _mg, room.world_y + room.height - _mg)
-            enemies.append(Enemy(ex, ey, room.id))
+_s = BATTLE_MAP_SCALE
+_BATTLE_ENEMY_ZONES = [
+    (int(28*_s),  int(28*_s),  int(285*_s), int(262*_s)),   # 좌상 교실
+    (int(757*_s), int(28*_s),  int(980*_s), int(262*_s)),   # 우상 휴게실
+    (int(28*_s),  int(283*_s), int(285*_s), int(465*_s)),   # 좌중 창고
+    (int(757*_s), int(283*_s), int(980*_s), int(465*_s)),   # 우중 교무실
+    (int(28*_s),  int(487*_s), int(285*_s), int(672*_s)),   # 좌하 식당
+]
+_mg = int(30 * BATTLE_MAP_SCALE)
+for (x1, y1, x2, y2) in _BATTLE_ENEMY_ZONES:
+    for _ in range(random.randint(2, 4)):
+        ex = random.randint(x1 + _mg, x2 - _mg)
+        ey = random.randint(y1 + _mg, y2 - _mg)
+        enemies.append(Enemy(ex, ey, 0))
 bullets = []
 current_stage_text = "2-5"
 
@@ -1282,8 +1231,8 @@ def _jump_to_stage(target_state):
         if not battle_bgm_started:
             play_bgm(1)
             battle_bgm_started = True
-        player.world_x = rooms[0].world_x + rooms[0].width  // 2
-        player.world_y = rooms[0].world_y + rooms[0].height // 2
+        player.world_x = BATTLE_START_X
+        player.world_y = BATTLE_START_Y
         player.costume = "uniform"
 
 def _draw_debug_menu(surface, cursor):
@@ -1576,8 +1525,8 @@ while running:
         if elapsed >= PREFECT_FADEOUT_DURATION:
             # 전투맵으로 전환 — 플레이어 월드 좌표를 방 1 중앙으로 초기화
             game_state = "battle"
-            player.world_x = rooms[0].world_x + rooms[0].width  // 2
-            player.world_y = rooms[0].world_y + rooms[0].height // 2
+            player.world_x = BATTLE_START_X
+            player.world_y = BATTLE_START_Y
             player.costume = "uniform"
             play_bgm(1)
             battle_bgm_started = True
@@ -1599,22 +1548,6 @@ while running:
     keys = pygame.key.get_pressed()
     player.update(keys, enemies, current_time, bullets)
 
-    piano_cx   = PIANO_WORLD_X + PIANO_DRAW_W // 2
-    piano_cy   = PIANO_WORLD_Y + PIANO_DRAW_H // 2
-    dist_piano = math.hypot(player.world_x - piano_cx, player.world_y - piano_cy)
-    near_piano = dist_piano < PIANO_INTERACT_RADIUS
-
-    e_pressed_now = keys[pygame.K_e]
-    if near_piano and e_pressed_now and not piano_e_pressed_prev:
-        play_bgm(bgm_current_index + 1)
-    piano_e_pressed_prev = e_pressed_now
-
-    for room in rooms:
-        if room.has_enemies:
-            room.is_cleared = not any(e.room_id == room.id for e in enemies)
-        else:
-            room.is_cleared = True
-
     for bullet in bullets[:]:
         bullet.update()
         if bullet.distance_traveled > bullet.max_range:
@@ -1631,31 +1564,34 @@ while running:
         if hit:
             bullets.remove(bullet)
 
-    camera_x = WIDTH  // 2 - int(player.world_x)
-    camera_y = HEIGHT // 2 - int(player.world_y)
+    # ── 전투맵: 카메라가 플레이어 중심 추적 ──
+    # 카메라: 플레이어를 화면 중앙에 두되, 맵 경계에서 클램프
+    cam_x = int(player.world_x) - WIDTH  // 2
+    cam_y = int(player.world_y) - HEIGHT // 2
+    cam_x = max(0, min(cam_x, BATTLE_MAP_W - WIDTH))
+    cam_y = max(0, min(cam_y, BATTLE_MAP_H - HEIGHT))
 
     screen.fill(BG_COLOR)
 
-    for room in rooms:
-        screen.blit(room.floor_surf, (room.world_x+camera_x, room.world_y+camera_y))
-        rr = pygame.Rect(room.world_x+camera_x, room.world_y+camera_y, room.width, room.height)
-        pygame.draw.rect(screen, WALL_COLOR, rr, int(8*SCALE))
+    # 배경 이미지 (카메라 오프셋 적용)
+    if battle_bg_img:
+        screen.blit(battle_bg_img, (-cam_x, -cam_y))
 
-    for corr in corridors:
-        pygame.draw.rect(screen, FLOOR_COLOR_A,
-                         (corr.x+camera_x, corr.y+camera_y, corr.width, corr.height))
+    # 디버그: 워크존 폴리곤 표시 (카메라 오프셋 적용, 초록)
+    if debug_menu_open is False:
+        for poly in _BATTLE_WALK_POLYS:
+            sp = [(x - cam_x, y - cam_y) for x, y in poly]
+            pygame.draw.polygon(screen, (0, 220, 80), sp, 2)
+            for pt in sp:
+                pygame.draw.circle(screen, (0, 255, 100), pt, 4)
+        for rect in _BATTLE_CORRIDOR_RECTS:
+            sr = pygame.Rect(rect.x - cam_x, rect.y - cam_y, rect.width, rect.height)
+            pygame.draw.rect(screen, (80, 180, 255), sr, 2)
 
-    draw_piano(screen, camera_x, camera_y, near_piano)
-
-    active_room_now = next(
-        (r for r in rooms if r.rect.collidepoint(player.world_x, player.world_y)), None)
-    if active_room_now and active_room_now.has_enemies and not active_room_now.is_cleared:
-        for door_dict in active_room_now.doors:
-            draw_door(screen, door_dict, camera_x, camera_y)
-
+    # 적 (카메라 오프셋)
     for enemy in enemies:
-        ex = int(enemy.world_x + camera_x)
-        ey = int(enemy.world_y + camera_y)
+        ex = int(enemy.world_x) - cam_x
+        ey = int(enemy.world_y) - cam_y
         er = enemy.radius
         pygame.draw.circle(screen, ENEMY_COLOR, (ex, ey), er)
         eo = int(6*SCALE); er1 = int(5*SCALE); er2 = int(3*SCALE); ey2 = int(5*SCALE)
@@ -1664,16 +1600,22 @@ while running:
         pygame.draw.circle(screen, (0,0,0),       (ex-eo+1, ey-ey2), er2)
         pygame.draw.circle(screen, (0,0,0),       (ex+eo+1, ey-ey2), er2)
 
+    # 총알 (카메라 오프셋)
     for bullet in bullets:
         pygame.draw.circle(screen, BULLET_COLOR,
-                           (int(bullet.world_x+camera_x), int(bullet.world_y+camera_y)),
+                           (int(bullet.world_x) - cam_x, int(bullet.world_y) - cam_y),
                            bullet.radius)
 
-    player.draw(screen, WIDTH//2, HEIGHT//2, current_time)
+    # 플레이어 (항상 화면 중앙, 단 맵 경계에서는 카메라 클램프로 치우침)
+    px_screen = int(player.world_x) - cam_x
+    py_screen = int(player.world_y) - cam_y
+    player.draw(screen, px_screen, py_screen, current_time)
 
-    mm_x = WIDTH - int(200 * SCALE)
-    mm_y = 20
-    draw_minimap(screen, rooms, id_map, mini_connections, player.current_room_id, mm_x, mm_y)
+    # 마우스 → 월드 좌표 표시 (워크존 조정용)
+    mx, my = pygame.mouse.get_pos()
+    wx, wy = mx + cam_x, my + cam_y
+    dbg = font_mini.render(f"world: ({wx}, {wy})  screen: ({mx}, {my})", True, (255, 255, 0))
+    screen.blit(dbg, (10, HEIGHT - 22))
 
     if debug_menu_open:
         _draw_debug_menu(screen, debug_cursor)
