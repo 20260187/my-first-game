@@ -70,7 +70,7 @@ if os.path.exists(title_img_path):
     s = min(WIDTH / img_w, HEIGHT / img_h)
     title_img = pygame.transform.smoothscale(raw, (int(img_w * s), int(img_h * s)))
 
-# ── 히나 방 이미지 (정사각형, 높이에 맞춤) ──
+# ── 히나 방 이미지 ──
 hina_room_img  = None
 hina_room_rect = None
 hina_room_path = os.path.join(ASSETS_DIR, "hina_room.png")
@@ -80,7 +80,7 @@ if os.path.exists(hina_room_path):
     hina_room_img  = pygame.transform.scale(_raw_room, (_room_size, _room_size))
     hina_room_rect = hina_room_img.get_rect(center=(WIDTH // 2, HEIGHT // 2))
 
-# ── 선도부실 이미지 (정사각형, 히나 방과 동일 사이즈) ──
+# ── 선도부실 이미지 ──
 prefect_room_img  = None
 prefect_room_rect = None
 prefect_room_path = os.path.join(ASSETS_DIR, "prefect_room.png")
@@ -90,15 +90,13 @@ if os.path.exists(prefect_room_path):
     prefect_room_img  = pygame.transform.scale(_raw_pr, (_room_size_pr, _room_size_pr))
     prefect_room_rect = prefect_room_img.get_rect(center=(WIDTH // 2, HEIGHT // 2))
 
-# ── aco 캐릭터 이미지 로드 ──
-# ★ FIX 1: convert_alpha() + colorkey (0,0,0) 적용해서 검은 배경 제거
-# 원본 비율 190(가로) x 250(세로), 히나와 동일한 높이(int(64*SCALE)) 기준으로 가로 맞춤
+# ── aco 캐릭터 이미지 ──
 _AKO_ORIG_W, _AKO_ORIG_H = 190, 250
 _AKO_TARGET_H = int(80 * SCALE)
 _AKO_TARGET_W = int(_AKO_TARGET_H * _AKO_ORIG_W / _AKO_ORIG_H)
 ACO_DRAW_W = _AKO_TARGET_W
 ACO_DRAW_H = _AKO_TARGET_H
-ACO_DRAW_SIZE = max(ACO_DRAW_W, ACO_DRAW_H)  # 기존 코드와의 호환용
+ACO_DRAW_SIZE = max(ACO_DRAW_W, ACO_DRAW_H)
 
 aco_img = None
 aco_img_path = os.path.join(ASSETS_DIR, "ako.png")
@@ -110,19 +108,67 @@ if os.path.exists(aco_img_path):
         aco_img = _aco_scaled
     except Exception as e:
         print(f"[WARN] ako 이미지 로드 실패: {e}")
-        # 로드 실패 시 None 유지 → 원(circle)으로 폴백
 
-# aco 선도부실 화면 위치 (책상 앞)
 ACO_SCREEN_POS      = (430, 400)
 ACO_INTERACT_RADIUS = 100
 
-# ── 히나 방 인터렉션 핫스팟 (화면 좌표) ──
 WARDROBE_POS    = (770, 460)
 WARDROBE_RADIUS = 80
 BED_POS    = (340, 260)
 BED_RADIUS = 80
 
+# ─────────────────────────────────────────────
+# ── 적 스프라이트 로드 (en1, en2 — 2프레임 시트) ──
+# 원본 크기: 가로 ~1000, 세로 ~600 (각 프레임 500×600)
+# 렌더 크기: ENEMY_DRAW_W × ENEMY_DRAW_H
+# ─────────────────────────────────────────────
+ENEMY_DRAW_W = int(90 * SCALE)   # 화면 표시 가로
+ENEMY_DRAW_H = int(108 * SCALE)  # 화면 표시 세로 (600/1000 * ENEMY_DRAW_W * 2 ≈ 비율 유지)
+ENEMY_ANIM_INTERVAL = 300        # 프레임 교체 ms
+
+# st 이미지 렌더 크기 (원본 850×360 비율 유지)
+ST_DRAW_W = int(85 * SCALE)
+ST_DRAW_H = int(36 * SCALE)
+
+def _load_enemy_sprite(name, frame_count=2):
+    """가로 2프레임 스프라이트 시트 로드 → [frame0, frame1] 반환"""
+    path = os.path.join(ASSETS_DIR, f"{name}.png")
+    frames = []
+    if os.path.exists(path):
+        try:
+            raw = pygame.image.load(path).convert_alpha()
+            raw_w, raw_h = raw.get_size()
+            frame_w = raw_w // frame_count
+            for i in range(frame_count):
+                fr = raw.subsurface(pygame.Rect(i * frame_w, 0, frame_w, raw_h))
+                sc = pygame.transform.scale(fr, (ENEMY_DRAW_W, ENEMY_DRAW_H))
+                sc.set_colorkey((0, 0, 0))
+                frames.append(sc)
+        except Exception as e:
+            print(f"[WARN] {name}.png 로드 실패: {e}")
+    return frames
+
+def _load_st_image(name):
+    """쓰러진 상태 단일 이미지 로드"""
+    path = os.path.join(ASSETS_DIR, f"{name}.png")
+    if os.path.exists(path):
+        try:
+            raw = pygame.image.load(path).convert_alpha()
+            sc  = pygame.transform.scale(raw, (ST_DRAW_W, ST_DRAW_H))
+            sc.set_colorkey((0, 0, 0))
+            return sc
+        except Exception as e:
+            print(f"[WARN] {name}.png 로드 실패: {e}")
+    return None
+
+en1_frames = _load_enemy_sprite("en1")   # [frame0, frame1]
+en2_frames = _load_enemy_sprite("en2")
+st1_img    = _load_st_image("st1")
+st2_img    = _load_st_image("st2")
+
+# ─────────────────────────────────────────────
 # 스프라이트
+# ─────────────────────────────────────────────
 SPRITE_FRAME_W   = 320
 SPRITE_FRAME_H   = 320
 SPRITE_FRAMES    = 4
@@ -143,7 +189,6 @@ if os.path.exists(hina_move_path):
         fl.set_colorkey((0, 0, 0))
         sprite_frames_left.append(fl)
 
-# ── 수면복 스프라이트 ──
 sleep_frames_right = []
 sleep_frames_left  = []
 hina_sleep_path = os.path.join(ASSETS_DIR, "hina_sleep_move.png")
@@ -158,7 +203,6 @@ if os.path.exists(hina_sleep_path):
         fl.set_colorkey((0, 0, 0))
         sleep_frames_left.append(fl)
 
-# 총
 GUN_DRAW_SIZE = int(60 * SCALE)
 gun_img_right = None
 gun_img_path  = os.path.join(ASSETS_DIR, "hina_gun.png")
@@ -218,7 +262,6 @@ BGM_FILES = [
     os.path.join(ASSETS_DIR, "bgm2.opus"),
     os.path.join(ASSETS_DIR, "bgm3.opus"),
 ]
-FUNKY_ROAD_PATH = os.path.join(ASSETS_DIR, "funky_road.opus")
 bgm_current_index = 0
 
 def play_bgm(index):
@@ -242,36 +285,20 @@ def play_funky_road():
             pygame.mixer.music.play(-1)
         except Exception as e:
             print(f"[WARN] funky_road 로드 실패: {e}")
-    else:
-        print("[WARN] funky_road.opus 파일 없음")
 
 # ─────────────────────────────────────────────
-# 히나 방 이동 가능 구역
+# 워크존
 # ─────────────────────────────────────────────
 _HINA_WALK_POLY = [
-    (240, 580),
-    (240, 320),
-    (370, 320),
-    (370, 250),
-    (710, 250),
-    (710, 580),
+    (240, 580), (240, 320), (370, 320), (370, 250),
+    (710, 250), (710, 580),
 ]
 
-# ─────────────────────────────────────────────
-# 선도부실 이동 가능 구역
-# ─────────────────────────────────────────────
 _PREFECT_WALK_POLY = [
-    (280, 600),
-    (280, 450),
-    (350, 450),
-    (350, 190),
-    (700, 190),
-    (700, 600),
+    (280, 600), (280, 450), (350, 450), (350, 190),
+    (700, 190), (700, 600),
 ]
 
-# ─────────────────────────────────────────────
-# 공용 폴리곤 판정 함수
-# ─────────────────────────────────────────────
 def _point_in_poly(px, py, poly):
     n = len(poly)
     inside = False
@@ -291,18 +318,12 @@ def _point_in_prefect_walkzone(px, py):
     return _point_in_poly(px, py, _PREFECT_WALK_POLY)
 
 # ─────────────────────────────────────────────
-# 3. 전투 맵 워크존 (이미지 좌표 기준, 1000x700 화면)
+# 전투 맵 설정
 # ─────────────────────────────────────────────
-# 이미지를 1000x700으로 스케일한 기준 좌표
-# 수정하려면 아래 폴리곤 꼭짓점을 조정하세요
-# 디버그 모드(F10 → 전투맵)에서 초록 폴리곤으로 표시됩니다
+BATTLE_MAP_SCALE = 2.5
+BATTLE_MAP_W = int(WIDTH  * BATTLE_MAP_SCALE)
+BATTLE_MAP_H = int(HEIGHT * BATTLE_MAP_SCALE)
 
-# ── 배틀맵 스케일 상수 (여기서 배율 조정) ──
-BATTLE_MAP_SCALE = 2.5        # 이미지 원본 대비 배율 (변경 시 이 숫자만 수정)
-BATTLE_MAP_W = int(WIDTH  * BATTLE_MAP_SCALE)   # 월드 가로 (2500)
-BATTLE_MAP_H = int(HEIGHT * BATTLE_MAP_SCALE)   # 월드 세로 (1750)
-
-# ── 전투 배경 이미지 ──
 battle_bg_img  = None
 battle_bg_path = os.path.join(ASSETS_DIR, "gehenna.png")
 if os.path.exists(battle_bg_path):
@@ -312,37 +333,27 @@ if os.path.exists(battle_bg_path):
     except Exception as e:
         print(f"[WARN] battle_map 로드 실패: {e}")
 
-_S = BATTLE_MAP_SCALE  # 좌표 곱셈용 단축 변수
+_S = BATTLE_MAP_SCALE
 
-# 전체 이동 가능 구역 — 원본 이미지 좌표 × _S
-# 수정 시 숫자는 1000x700 기준 원본 좌표, _S 곱해서 실제 월드 좌표가 됩니다
-def _si(v): return int(v * _S)  # 스케일 곱하고 int 변환 헬퍼
+def _si(v): return int(v * _S)
 
 _BATTLE_WALK_POLYS = [
-    # 중앙 홀 (메인 통로)
     [(_si(310), _si(28)),  (_si(740), _si(28)),  (_si(740), _si(672)), (_si(310), _si(672))],
-    # 좌상 교실
     [(_si(28),  _si(28)),  (_si(285), _si(28)),  (_si(285), _si(262)), (_si(28),  _si(262))],
-    # 우상 휴게실
     [(_si(757), _si(28)),  (_si(980), _si(28)),  (_si(980), _si(262)), (_si(757), _si(262))],
-    # 좌중 창고
     [(_si(28),  _si(283)), (_si(285), _si(283)), (_si(285), _si(465)), (_si(28),  _si(465))],
-    # 우중 교무실
     [(_si(757), _si(283)), (_si(980), _si(283)), (_si(980), _si(465)), (_si(757), _si(465))],
-    # 좌하 식당
     [(_si(28),  _si(487)), (_si(285), _si(487)), (_si(285), _si(672)), (_si(28),  _si(672))],
-    # 우하 입구 (히나 시작 위치)
     [(_si(757), _si(487)), (_si(980), _si(487)), (_si(980), _si(672)), (_si(757), _si(672))],
 ]
 
-# 각 방 ↔ 중앙 홀 연결 통로
 _BATTLE_CORRIDOR_RECTS = [
-    pygame.Rect(_si(285), _si(80),  _si(30), _si(120)),   # 좌상
-    pygame.Rect(_si(740), _si(80),  _si(30), _si(120)),   # 우상
-    pygame.Rect(_si(285), _si(310), _si(30), _si(100)),   # 좌중
-    pygame.Rect(_si(740), _si(310), _si(30), _si(100)),   # 우중
-    pygame.Rect(_si(285), _si(530), _si(30), _si(100)),   # 좌하
-    pygame.Rect(_si(740), _si(530), _si(30), _si(100)),   # 우하
+    pygame.Rect(_si(285), _si(80),  _si(30), _si(120)),
+    pygame.Rect(_si(740), _si(80),  _si(30), _si(120)),
+    pygame.Rect(_si(285), _si(310), _si(30), _si(100)),
+    pygame.Rect(_si(740), _si(310), _si(30), _si(100)),
+    pygame.Rect(_si(285), _si(530), _si(30), _si(100)),
+    pygame.Rect(_si(740), _si(530), _si(30), _si(100)),
 ]
 
 def _point_in_battle_walkzone(px, py):
@@ -354,27 +365,16 @@ def _point_in_battle_walkzone(px, py):
             return True
     return False
 
-# 히나 전투맵 시작 위치 (우하단 문 앞)
 BATTLE_START_X = 870.0 * BATTLE_MAP_SCALE
 BATTLE_START_Y = 620.0 * BATTLE_MAP_SCALE
 
-# 미니맵용 더미 (draw_minimap 호환 유지)
 rooms            = []
 id_map           = {}
 corridors        = []
 mini_connections = []
 
 # ─────────────────────────────────────────────
-# 4. 방·통로 생성  ← 전투맵 이미지로 대체되어 비워둠
-# ─────────────────────────────────────────────
-# (기존 Room/corridor 시스템 제거)
-
-# ─────────────────────────────────────────────
-# 5. 문 그리기  ← 전투맵에서는 사용 안 함
-# ─────────────────────────────────────────────
-
-# ─────────────────────────────────────────────
-# 6. 플레이어
+# 플레이어
 # ─────────────────────────────────────────────
 GUN_VISIBLE_MS    = 300
 BURST_COUNT       = 4
@@ -500,7 +500,6 @@ class Player:
         nx = self.world_x + dx * self.speed
         ny = self.world_y + dy * self.speed
 
-        # 전투 워크존 기반 이동 (카메라 오프셋 없음 — world == screen)
         if _point_in_battle_walkzone(nx, ny):
             self.world_x, self.world_y = nx, ny
         else:
@@ -516,9 +515,12 @@ class Player:
         else:
             self.anim_frame = 0
 
+        # 살아있는 적만 타겟팅
         self.target_enemy = None
         min_dist = self.attack_range
         for enemy in enemies:
+            if enemy.is_dead:
+                continue
             ddx = enemy.world_x - self.world_x
             ddy = enemy.world_y - self.world_y
             d_sq = ddx*ddx + ddy*ddy
@@ -582,14 +584,72 @@ class Player:
                 surface.blit(fi, fi.get_rect(center=(mx2, my2)))
 
 # ─────────────────────────────────────────────
-# 7. 적 / 총알
+# 적 클래스 (스프라이트 + HP 5)
 # ─────────────────────────────────────────────
-class Enemy:
-    def __init__(self, x, y, room_id):
-        self.world_x = x; self.world_y = y
-        self.radius  = int(22 * SCALE)
-        self.room_id = room_id
+ENEMY_MAX_HP = 5
 
+class Enemy:
+    def __init__(self, x, y, room_id, enemy_type=1):
+        self.world_x    = x
+        self.world_y    = y
+        self.radius     = int(22 * SCALE)
+        self.room_id    = room_id
+        self.enemy_type = enemy_type   # 1 or 2
+
+        self.hp         = ENEMY_MAX_HP
+        self.is_dead    = False        # True: st 이미지로 표시, 충돌 무시
+
+        self.anim_frame = 0
+        self.anim_timer = 0            # 마지막 프레임 교체 시각
+
+    def take_hit(self):
+        if self.is_dead:
+            return
+        self.hp -= 1
+        if self.hp <= 0:
+            self.is_dead = True
+
+    def update_anim(self, current_time):
+        if self.is_dead:
+            return
+        frames = en1_frames if self.enemy_type == 1 else en2_frames
+        if len(frames) < 2:
+            return
+        if current_time - self.anim_timer >= ENEMY_ANIM_INTERVAL:
+            self.anim_frame = (self.anim_frame + 1) % len(frames)
+            self.anim_timer = current_time
+
+    def draw(self, surface, sx, sy, current_time):
+        self.update_anim(current_time)
+
+        if self.is_dead:
+            # 쓰러진 이미지 표시
+            st_img = st1_img if self.enemy_type == 1 else st2_img
+            if st_img:
+                surface.blit(st_img, st_img.get_rect(center=(sx, sy)))
+            else:
+                # 폴백: 회색 납작 타원
+                pygame.draw.ellipse(surface, (120, 80, 80),
+                                    pygame.Rect(sx - ST_DRAW_W//2, sy - ST_DRAW_H//4,
+                                                ST_DRAW_W, ST_DRAW_H//2))
+        else:
+            # 애니메이션 프레임 표시
+            frames = en1_frames if self.enemy_type == 1 else en2_frames
+            if frames:
+                img = frames[self.anim_frame % len(frames)]
+                surface.blit(img, img.get_rect(center=(sx, sy)))
+            else:
+                # 폴백: 원 + 눈
+                pygame.draw.circle(surface, ENEMY_COLOR, (sx, sy), self.radius)
+                eo = int(6*SCALE); er1 = int(5*SCALE); er2 = int(3*SCALE); ey2 = int(5*SCALE)
+                pygame.draw.circle(surface, (255,255,255), (sx-eo, sy-ey2), er1)
+                pygame.draw.circle(surface, (255,255,255), (sx+eo, sy-ey2), er1)
+                pygame.draw.circle(surface, (0,0,0),       (sx-eo+1, sy-ey2), er2)
+                pygame.draw.circle(surface, (0,0,0),       (sx+eo+1, sy-ey2), er2)
+
+# ─────────────────────────────────────────────
+# 총알
+# ─────────────────────────────────────────────
 class Bullet:
     def __init__(self, x, y, angle, speed, radius, max_range):
         self.world_x = x; self.world_y = y
@@ -605,33 +665,34 @@ class Bullet:
         self.distance_traveled += math.hypot(self.dx, self.dy)
 
 # ─────────────────────────────────────────────
-# 8. 객체 생성 및 적 배치
+# 객체 생성 및 적 배치
 # ─────────────────────────────────────────────
 player  = Player()
 player.world_x = BATTLE_START_X
 player.world_y = BATTLE_START_Y
 
-# 전투맵 적 배치 — 각 방 안에 랜덤 배치
 enemies = []
 _s = BATTLE_MAP_SCALE
 _BATTLE_ENEMY_ZONES = [
-    (int(28*_s),  int(28*_s),  int(285*_s), int(262*_s)),   # 좌상 교실
-    (int(757*_s), int(28*_s),  int(980*_s), int(262*_s)),   # 우상 휴게실
-    (int(28*_s),  int(283*_s), int(285*_s), int(465*_s)),   # 좌중 창고
-    (int(757*_s), int(283*_s), int(980*_s), int(465*_s)),   # 우중 교무실
-    (int(28*_s),  int(487*_s), int(285*_s), int(672*_s)),   # 좌하 식당
+    (int(28*_s),  int(28*_s),  int(285*_s), int(262*_s)),
+    (int(757*_s), int(28*_s),  int(980*_s), int(262*_s)),
+    (int(28*_s),  int(283*_s), int(285*_s), int(465*_s)),
+    (int(757*_s), int(283*_s), int(980*_s), int(465*_s)),
+    (int(28*_s),  int(487*_s), int(285*_s), int(672*_s)),
 ]
 _mg = int(30 * BATTLE_MAP_SCALE)
-for (x1, y1, x2, y2) in _BATTLE_ENEMY_ZONES:
+for zone_idx, (x1, y1, x2, y2) in enumerate(_BATTLE_ENEMY_ZONES):
     for _ in range(random.randint(2, 4)):
         ex = random.randint(x1 + _mg, x2 - _mg)
         ey = random.randint(y1 + _mg, y2 - _mg)
-        enemies.append(Enemy(ex, ey, 0))
+        etype = random.choice([1, 2])
+        enemies.append(Enemy(ex, ey, 0, etype))
+
 bullets = []
 current_stage_text = "2-5"
 
 # ─────────────────────────────────────────────
-# 9. 미니맵
+# 미니맵
 # ─────────────────────────────────────────────
 START_ROOM_ID = 1
 
@@ -642,74 +703,8 @@ def draw_minimap(surface, rooms, id_map, mini_connections, player_room_id, mm_x,
     panel.fill((8, 8, 12, 210))
     pygame.draw.rect(panel, (55,55,65,255), (0,0,mm_box_w,mm_box_h), 2, border_radius=8)
     surface.blit(panel, (mm_x, mm_y))
-
-    icon_size    = int(22 * SCALE)
-    grid_spacing = int(44 * SCALE)
-    cx = mm_x + mm_box_w // 2 - int(10 * SCALE)
-    cy = mm_y + int(30 * SCALE)
-
-    for sid, eid in mini_connections:
-        r1, r2 = id_map[sid], id_map[eid]
-        x1 = cx + r1.grid_pos[0] * grid_spacing
-        y1 = cy + r1.grid_pos[1] * grid_spacing
-        x2 = cx + r2.grid_pos[0] * grid_spacing
-        y2 = cy + r2.grid_pos[1] * grid_spacing
-        pygame.draw.line(surface, (45,45,50), (x1,y1), (x2,y2), 5)
-
-    for room in rooms:
-        rcx = cx + room.grid_pos[0] * grid_spacing
-        rcy = cy + room.grid_pos[1] * grid_spacing
-        ir  = pygame.Rect(rcx - icon_size//2, rcy - icon_size//2, icon_size, icon_size)
-
-        if room.id == player_room_id:
-            bg_col, border_col, border_w = (220,220,220), (255,255,255), 2
-        elif room.is_cleared:
-            bg_col, border_col, border_w = (55,160,75), (80,200,100), 1
-        else:
-            bg_col, border_col, border_w = (65,65,72), (90,90,100), 1
-
-        pygame.draw.rect(surface, bg_col, ir, border_radius=4)
-        if room.has_enemies and not room.is_cleared:
-            pygame.draw.rect(surface, (210,50,50), ir, 2, border_radius=4)
-        else:
-            pygame.draw.rect(surface, border_col, ir, border_w, border_radius=4)
-
-        if room.id == START_ROOM_ID:
-            icon_col = (40,40,40) if room.id != player_room_id else (30,30,30)
-            hx, hy = rcx, rcy
-            hs = int(6 * SCALE)
-            pygame.draw.polygon(surface, icon_col,
-                                 [(hx-hs, hy-1), (hx+hs, hy-1), (hx, hy-int(hs*1.3))])
-            pygame.draw.rect(surface, icon_col,
-                             pygame.Rect(hx-hs+2, hy-1, (hs-2)*2, int(6*SCALE)))
-            pygame.draw.rect(surface, bg_col,
-                             pygame.Rect(hx-1, hy+1, int(3*SCALE), int(5*SCALE)))
-
     ss = font_mini.render(current_stage_text, True, (180,180,180))
     surface.blit(ss, ss.get_rect(centerx=mm_x+mm_box_w//2, top=mm_y+mm_box_h-int(18*SCALE)))
-
-# ─────────────────────────────────────────────
-# 피아노
-# ─────────────────────────────────────────────
-def draw_piano(surface, camera_x, camera_y, near_piano):
-    sx = PIANO_WORLD_X + camera_x
-    sy = PIANO_WORLD_Y + camera_y
-    if piano_img:
-        surface.blit(piano_img, (sx, sy))
-    else:
-        pygame.draw.rect(surface, (40,30,20), pygame.Rect(sx, sy, PIANO_DRAW_W, PIANO_DRAW_H))
-        pygame.draw.rect(surface, (80,60,40), pygame.Rect(sx, sy, PIANO_DRAW_W, PIANO_DRAW_H), 3)
-        lbl = font_mini.render("PIANO", True, (200,200,180))
-        surface.blit(lbl, lbl.get_rect(center=(sx+PIANO_DRAW_W//2, sy+PIANO_DRAW_H//2)))
-    if near_piano:
-        bgm_names = ["BGM 1", "BGM 2", "BGM 3"]
-        next_idx  = (bgm_current_index + 1) % 3
-        ps = font_prompt.render(f"악보 교체하기  [E]  →  {bgm_names[next_idx]}", True, (255,240,100))
-        pad = int(10 * SCALE)
-        bgs = pygame.Surface((ps.get_width()+pad*2, ps.get_height()+pad), pygame.SRCALPHA)
-        bgs.fill((0,0,0,170))
-        surface.blit(bgs, (sx+PIANO_DRAW_W//2-bgs.get_width()//2, sy-int(42*SCALE)))
-        surface.blit(ps, ps.get_rect(centerx=sx+PIANO_DRAW_W//2, top=sy-int(36*SCALE)))
 
 # ─────────────────────────────────────────────
 # 오프닝 나레이션
@@ -740,17 +735,12 @@ BED_UNIFORM_DIALOG = [
 BED_SLEEP_DIALOG = [
     ("???", "", "정해진 악보에서 벗어난 선율이여……."),
     ("???", "", "이제 마지막 장을 넘길 시간이다."),
-
     ("히나", "선도부", "……!?"),
-
     ("", "", "(불쾌한 목소리에 황급히 주위를 둘러보았지만, 그곳에는 아무도 없었다.)"),
-
     ("히나", "선도부", "……누구지?"),
-
     ("", "", "(설마, 과로 때문에 환청이라도 들리는 건가…….)"),
     ("", "", "(환청까지 들리다니…….)"),
     ("", "", "(확실히 무리한 모양이군.)"),
-
     ("", "", "(……지금은 신경 쓸 여유가 없어.)"),
     ("", "", "(우선 자도록 하자.)"),
 ]
@@ -788,9 +778,23 @@ ACO_DIALOG = [
     ("아코", "선도부", "예, 조심히 다녀오십시오.")
 ]
 
-MISSION_HINA_ROOM = "제복을 갈아입기."
-MISSION_SLEEP     = "침대에 눕기."
-MISSION_PREFECT   = "아코에게 말을 걸기."
+# ── 전투 클리어 후 선도부실 아코 칭찬 대화 ──
+ACO_CLEAR_DIALOG = [
+    ("아코", "선도부", "선도부장님, 수고하셨습니다."),
+    ("히나", "선도부", "...별것 아니야."),
+    ("아코", "선도부", "아닙니다. 이번 건은 꽤 까다로운 상황이었는데, 역시 선도부장님이십니다."),
+    ("아코", "선도부", "덕분에 학원 내 소란이 빠르게 진정될 것 같습니다."),
+    ("히나", "선도부", "그 정도라면 다행이군."),
+    ("아코", "선도부", "정말 감사합니다, 선도부장님. 수고하셨어요."),
+    ("히나", "선도부", "......됐어. 다음 건이나 가져와."),
+    ("아코", "선도부", "예, 알겠습니다. 잘하셨습니다!"),
+]
+
+MISSION_HINA_ROOM  = "제복을 갈아입기."
+MISSION_SLEEP      = "침대에 눕기."
+MISSION_PREFECT    = "아코에게 말을 걸기."
+MISSION_BATTLE     = "모든 학생들 제압하기."
+MISSION_AFTER_BATTLE = "아코에게 말을 걸기."
 
 # ─────────────────────────────────────────────
 # 오프닝 나레이션 시스템
@@ -1004,7 +1008,7 @@ class DialogSystem:
 
 
 # ─────────────────────────────────────────────
-# 10. 타이틀 화면
+# 타이틀 화면
 # ─────────────────────────────────────────────
 def draw_title_screen(surface, tick):
     surface.fill((10, 10, 15))
@@ -1054,7 +1058,7 @@ def draw_interact_prompt(surface, text, cx, cy):
     surface.blit(surf, (bx + pad_x, by + pad_y))
 
 # ─────────────────────────────────────────────
-# 페이드 아웃 헬퍼
+# 페이드 아웃
 # ─────────────────────────────────────────────
 def draw_fadeout(surface, alpha):
     ov = pygame.Surface((WIDTH, HEIGHT))
@@ -1106,13 +1110,11 @@ def draw_prefect_room(surface, player, current_time,
         lbl = font_mission.render("선도부실", True, (180, 180, 200))
         surface.blit(lbl, lbl.get_rect(center=(WIDTH//2, HEIGHT//2)))
 
-    # ── aco 캐릭터 그리기 ──
     if aco_img:
         ax = ACO_SCREEN_POS[0] - ACO_DRAW_W // 2
         ay = ACO_SCREEN_POS[1] - ACO_DRAW_H // 2
         surface.blit(aco_img, (ax, ay))
     else:
-        # 폴백: 보라색 원 + "ACO" 텍스트
         pygame.draw.circle(surface, (180, 120, 220), ACO_SCREEN_POS, 28)
         lbl = font_mini.render("ACO", True, (255, 255, 255))
         surface.blit(lbl, lbl.get_rect(center=ACO_SCREEN_POS))
@@ -1135,13 +1137,12 @@ def draw_prefect_room(surface, player, current_time,
     surface.blit(dbg, (10, 40))
 
 # ─────────────────────────────────────────────
-# 11. 메인 루프
+# 메인 루프 변수
 # ─────────────────────────────────────────────
 game_state           = "title"
 running              = True
 hina_bgm_started     = False
 battle_bgm_started   = False
-piano_e_pressed_prev = False
 
 opening  = OpeningNarration(OPENING_LINES)
 hina_dlg = DialogSystem(HINA_ROOM_DIALOG)
@@ -1154,9 +1155,17 @@ bed_used     = False
 fadeout_start    = 0
 FADEOUT_DURATION = 1200
 
-# ★ FIX 3: 아코 대화 완료 후 전투맵 전환용 페이드
 prefect_fadeout_start    = 0
 PREFECT_FADEOUT_DURATION = 1200
+
+# 전투 클리어 후 선도부실 복귀용 페이드
+battle_clear_fadeout_start   = 0
+BATTLE_CLEAR_FADEOUT_DURATION = 1400
+battle_cleared = False          # 전투 클리어 여부 (후속 선도부실 구분용)
+
+# 후속 선도부실 아코 대화
+aco_clear_dlg: DialogSystem | None = None
+aco_clear_talked = False
 
 e_prev = False
 
@@ -1170,6 +1179,7 @@ DEBUG_STAGES = [
     ("4. 히나 방 (자유)",  "hina_room"),
     ("5. 선도부실",        "prefect_room"),
     ("6. 전투 맵",         "battle"),
+    ("7. 클리어 후 선도부실", "post_battle_prefect"),
 ]
 debug_menu_open  = False
 debug_cursor     = 0
@@ -1180,6 +1190,8 @@ def _jump_to_stage(target_state):
     global game_state, hina_bgm_started, battle_bgm_started
     global bed_used, aco_talked, mid_dlg, aco_dlg
     global fadeout_start, prefect_fadeout_start
+    global battle_cleared, aco_clear_dlg, aco_clear_talked
+    global battle_clear_fadeout_start
 
     game_state = target_state
 
@@ -1231,13 +1243,31 @@ def _jump_to_stage(target_state):
         player.world_x = BATTLE_START_X
         player.world_y = BATTLE_START_Y
         player.costume = "uniform"
+        # 적 리스폰
+        enemies.clear()
+        for zone_idx, (x1, y1, x2, y2) in enumerate(_BATTLE_ENEMY_ZONES):
+            for _ in range(random.randint(2, 4)):
+                ex = random.randint(x1 + _mg, x2 - _mg)
+                ey = random.randint(y1 + _mg, y2 - _mg)
+                etype = random.choice([1, 2])
+                enemies.append(Enemy(ex, ey, 0, etype))
+        bullets.clear()
+
+    elif target_state == "post_battle_prefect":
+        play_funky_road()
+        player.hina_sx   = 500.0
+        player.hina_sy   = 560.0
+        player.costume   = "uniform"
+        battle_cleared   = True
+        aco_clear_talked = False
+        aco_clear_dlg    = None
 
 def _draw_debug_menu(surface, cursor):
     ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
     ov.fill((0, 0, 0, 190))
     surface.blit(ov, (0, 0))
 
-    panel_w = 380
+    panel_w = 400
     panel_h = 60 + len(DEBUG_STAGES) * 44 + 20
     px = WIDTH  // 2 - panel_w // 2
     py = HEIGHT // 2 - panel_h // 2
@@ -1265,6 +1295,9 @@ def _draw_debug_menu(surface, cursor):
     hint = font_debug.render("↑↓ 이동   Enter 선택   F10 닫기", True, (100, 120, 160))
     surface.blit(hint, hint.get_rect(centerx=px + panel_w // 2, top=py + panel_h - 26))
 
+# ─────────────────────────────────────────────
+# 메인 루프
+# ─────────────────────────────────────────────
 while running:
     current_time = pygame.time.get_ticks()
 
@@ -1278,12 +1311,10 @@ while running:
                 else:
                     running = False
 
-            # ── F10: 디버그 메뉴 토글 ──
             if event.key == pygame.K_F10:
                 debug_menu_open = not debug_menu_open
                 debug_cursor    = 0
 
-            # ── 디버그 메뉴가 열려 있으면 다른 키 입력 가로챔 ──
             if debug_menu_open:
                 if event.key == pygame.K_UP:
                     debug_cursor = (debug_cursor - 1) % len(DEBUG_STAGES)
@@ -1292,7 +1323,6 @@ while running:
                 elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     _jump_to_stage(DEBUG_STAGES[debug_cursor][1])
                     debug_menu_open = False
-                # 메뉴 열린 동안 Space 등 다른 입력은 아래로 흘러가지 않도록 continue
                 continue
 
             if event.key == pygame.K_SPACE and game_state == "title":
@@ -1329,11 +1359,19 @@ while running:
                 if aco_dlg:
                     aco_dlg.on_space()
                     if aco_dlg.finished:
-                        # ★ FIX 3: 대화 완료 → 페이드 아웃 후 전투맵으로
                         aco_talked              = True
                         game_state              = "prefect_fadeout"
                         prefect_fadeout_start   = current_time
                         aco_dlg                 = None
+
+            # ── 전투 클리어 후 아코 대화 ──
+            elif event.key == pygame.K_SPACE and game_state == "post_battle_aco_dlg":
+                if aco_clear_dlg:
+                    aco_clear_dlg.on_space()
+                    if aco_clear_dlg.finished:
+                        aco_clear_talked = True
+                        aco_clear_dlg    = None
+                        game_state       = "post_battle_prefect"
 
     # ── 타이틀 ──
     if game_state == "title":
@@ -1344,7 +1382,7 @@ while running:
         clock.tick(60)
         continue
 
-    # ── 오프닝 나레이션 ──
+    # ── 오프닝 ──
     if game_state == "intro":
         opening.update(current_time)
         opening.draw(screen, current_time)
@@ -1378,14 +1416,9 @@ while running:
         dist_bed      = math.hypot(player.hina_sx - BED_POS[0],
                                    player.hina_sy - BED_POS[1])
 
-        # 옷장: 제복 상태일 때만
         near_wardrobe = (dist_wardrobe < WARDROBE_RADIUS) and (player.costume == "uniform")
-
-        # ★ FIX 2: 침대는 항상 가까이 가면 반응 (bed_used 아직 안 됐을 때)
-        # 제복 상태 → BED_UNIFORM_DIALOG, 수면복 상태 → BED_SLEEP_DIALOG
         near_bed = (dist_bed < BED_RADIUS) and not bed_used
 
-        # 미션 결정
         if player.costume == "uniform":
             mission_txt = MISSION_HINA_ROOM
         elif not bed_used:
@@ -1436,7 +1469,7 @@ while running:
         clock.tick(60)
         continue
 
-    # ── 히나 방 → 선도부실 페이드 아웃 ──
+    # ── 히나 방 → 선도부실 페이드 ──
     if game_state == "fadeout":
         elapsed = current_time - fadeout_start
         alpha   = min(255, int(255 * elapsed / FADEOUT_DURATION))
@@ -1506,7 +1539,7 @@ while running:
         clock.tick(60)
         continue
 
-    # ★ FIX 3: 선도부실 → 전투맵 페이드 아웃
+    # ── 선도부실 → 전투맵 페이드 ──
     if game_state == "prefect_fadeout":
         elapsed = current_time - prefect_fadeout_start
         alpha   = min(255, int(255 * elapsed / PREFECT_FADEOUT_DURATION))
@@ -1520,7 +1553,6 @@ while running:
         player.draw(screen, int(player.hina_sx), int(player.hina_sy), current_time)
         draw_fadeout(screen, alpha)
         if elapsed >= PREFECT_FADEOUT_DURATION:
-            # 전투맵으로 전환 — 플레이어 월드 좌표를 방 1 중앙으로 초기화
             game_state = "battle"
             player.world_x = BATTLE_START_X
             player.world_y = BATTLE_START_Y
@@ -1533,91 +1565,185 @@ while running:
         clock.tick(60)
         continue
 
+    # ─────────────────────────────────────────
     # ── 전투 맵 ──
-    if game_state != "battle":
-        # 혹시 모를 미정의 상태면 battle로 강제 이동
-        game_state = "battle"
+    # ─────────────────────────────────────────
+    if game_state == "battle":
+        if not battle_bgm_started:
+            play_bgm(1)
+            battle_bgm_started = True
 
-    if not battle_bgm_started:
-        play_bgm(1)
-        battle_bgm_started = True
+        keys = pygame.key.get_pressed()
+        player.update(keys, enemies, current_time, bullets)
 
-    keys = pygame.key.get_pressed()
-    player.update(keys, enemies, current_time, bullets)
+        # 총알 업데이트 — 죽은 적에는 충돌 안 함
+        for bullet in bullets[:]:
+            bullet.update()
+            if bullet.distance_traveled > bullet.max_range:
+                bullets.remove(bullet)
+                continue
+            hit = False
+            for enemy in enemies:
+                if enemy.is_dead:
+                    continue
+                ddx = bullet.world_x - enemy.world_x
+                ddy = bullet.world_y - enemy.world_y
+                if ddx*ddx + ddy*ddy < enemy.radius * enemy.radius:
+                    enemy.take_hit()
+                    hit = True
+                    break
+            if hit and bullet in bullets:
+                bullets.remove(bullet)
 
-    for bullet in bullets[:]:
-        bullet.update()
-        if bullet.distance_traveled > bullet.max_range:
-            bullets.remove(bullet)
-            continue
-        hit = False
-        for enemy in enemies[:]:
-            ddx = bullet.world_x - enemy.world_x
-            ddy = bullet.world_y - enemy.world_y
-            if ddx*ddx + ddy*ddy < enemy.radius * enemy.radius:
-                enemies.remove(enemy)
-                hit = True
-                break
-        if hit:
-            bullets.remove(bullet)
+        # ── 전투 클리어 판정: 살아있는 적이 0명 ──
+        alive_count = sum(1 for e in enemies if not e.is_dead)
+        if alive_count == 0 and len(enemies) > 0:
+            # 클리어 → 페이드 아웃 후 선도부실로
+            game_state                 = "battle_clear_fadeout"
+            battle_clear_fadeout_start = current_time
+            battle_cleared             = True
+            bullets.clear()
 
-    # ── 전투맵: 카메라가 플레이어 중심 추적 ──
-    # 카메라: 플레이어를 화면 중앙에 두되, 맵 경계에서 클램프
-    cam_x = int(player.world_x) - WIDTH  // 2
-    cam_y = int(player.world_y) - HEIGHT // 2
-    cam_x = max(0, min(cam_x, BATTLE_MAP_W - WIDTH))
-    cam_y = max(0, min(cam_y, BATTLE_MAP_H - HEIGHT))
+        # 카메라
+        cam_x = int(player.world_x) - WIDTH  // 2
+        cam_y = int(player.world_y) - HEIGHT // 2
+        cam_x = max(0, min(cam_x, BATTLE_MAP_W - WIDTH))
+        cam_y = max(0, min(cam_y, BATTLE_MAP_H - HEIGHT))
 
-    screen.fill(BG_COLOR)
+        screen.fill(BG_COLOR)
 
-    # 배경 이미지 (카메라 오프셋 적용)
-    if battle_bg_img:
-        screen.blit(battle_bg_img, (-cam_x, -cam_y))
+        if battle_bg_img:
+            screen.blit(battle_bg_img, (-cam_x, -cam_y))
 
-    # 디버그: 워크존 폴리곤 표시 (카메라 오프셋 적용, 초록)
-    if debug_menu_open is False:
-        for poly in _BATTLE_WALK_POLYS:
-            sp = [(x - cam_x, y - cam_y) for x, y in poly]
-            pygame.draw.polygon(screen, (0, 220, 80), sp, 2)
-            for pt in sp:
-                pygame.draw.circle(screen, (0, 255, 100), pt, 4)
-        for rect in _BATTLE_CORRIDOR_RECTS:
-            sr = pygame.Rect(rect.x - cam_x, rect.y - cam_y, rect.width, rect.height)
-            pygame.draw.rect(screen, (80, 180, 255), sr, 2)
+        # 디버그 워크존 (디버그 메뉴 닫혀있을 때만)
+        if not debug_menu_open:
+            for poly in _BATTLE_WALK_POLYS:
+                sp = [(x - cam_x, y - cam_y) for x, y in poly]
+                pygame.draw.polygon(screen, (0, 220, 80), sp, 2)
+            for rect in _BATTLE_CORRIDOR_RECTS:
+                sr = pygame.Rect(rect.x - cam_x, rect.y - cam_y, rect.width, rect.height)
+                pygame.draw.rect(screen, (80, 180, 255), sr, 2)
 
-    # 적 (카메라 오프셋)
-    for enemy in enemies:
-        ex = int(enemy.world_x) - cam_x
-        ey = int(enemy.world_y) - cam_y
-        er = enemy.radius
-        pygame.draw.circle(screen, ENEMY_COLOR, (ex, ey), er)
-        eo = int(6*SCALE); er1 = int(5*SCALE); er2 = int(3*SCALE); ey2 = int(5*SCALE)
-        pygame.draw.circle(screen, (255,255,255), (ex-eo, ey-ey2), er1)
-        pygame.draw.circle(screen, (255,255,255), (ex+eo, ey-ey2), er1)
-        pygame.draw.circle(screen, (0,0,0),       (ex-eo+1, ey-ey2), er2)
-        pygame.draw.circle(screen, (0,0,0),       (ex+eo+1, ey-ey2), er2)
+        # 적 그리기 (쓰러진 적도 st 이미지로 표시)
+        for enemy in enemies:
+            ex = int(enemy.world_x) - cam_x
+            ey = int(enemy.world_y) - cam_y
+            enemy.draw(screen, ex, ey, current_time)
 
-    # 총알 (카메라 오프셋)
-    for bullet in bullets:
-        pygame.draw.circle(screen, BULLET_COLOR,
-                           (int(bullet.world_x) - cam_x, int(bullet.world_y) - cam_y),
-                           bullet.radius)
+        # 총알
+        for bullet in bullets:
+            pygame.draw.circle(screen, BULLET_COLOR,
+                               (int(bullet.world_x) - cam_x, int(bullet.world_y) - cam_y),
+                               bullet.radius)
 
-    # 플레이어 (항상 화면 중앙, 단 맵 경계에서는 카메라 클램프로 치우침)
-    px_screen = int(player.world_x) - cam_x
-    py_screen = int(player.world_y) - cam_y
-    player.draw(screen, px_screen, py_screen, current_time)
+        # 플레이어
+        px_screen = int(player.world_x) - cam_x
+        py_screen = int(player.world_y) - cam_y
+        player.draw(screen, px_screen, py_screen, current_time)
 
-    # 마우스 → 월드 좌표 표시 (워크존 조정용)
-    mx, my = pygame.mouse.get_pos()
-    wx, wy = mx + cam_x, my + cam_y
-    dbg = font_mini.render(f"world: ({wx}, {wy})  screen: ({mx}, {my})", True, (255, 255, 0))
-    screen.blit(dbg, (10, HEIGHT - 22))
+        # 미션 UI
+        remaining = sum(1 for e in enemies if not e.is_dead)
+        draw_mission(screen, f"{MISSION_BATTLE}  ({remaining}명 남음)")
 
-    if debug_menu_open:
-        _draw_debug_menu(screen, debug_cursor)
-    pygame.display.flip()
-    clock.tick(60)
+        mx, my = pygame.mouse.get_pos()
+        wx, wy = mx + cam_x, my + cam_y
+        dbg = font_mini.render(f"world: ({wx}, {wy})  screen: ({mx}, {my})", True, (255, 255, 0))
+        screen.blit(dbg, (10, HEIGHT - 22))
+
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
+
+    # ── 전투 클리어 페이드 아웃 ──
+    if game_state == "battle_clear_fadeout":
+        elapsed = current_time - battle_clear_fadeout_start
+        alpha   = min(255, int(255 * elapsed / BATTLE_CLEAR_FADEOUT_DURATION))
+
+        cam_x = int(player.world_x) - WIDTH  // 2
+        cam_y = int(player.world_y) - HEIGHT // 2
+        cam_x = max(0, min(cam_x, BATTLE_MAP_W - WIDTH))
+        cam_y = max(0, min(cam_y, BATTLE_MAP_H - HEIGHT))
+
+        screen.fill(BG_COLOR)
+        if battle_bg_img:
+            screen.blit(battle_bg_img, (-cam_x, -cam_y))
+        for enemy in enemies:
+            ex = int(enemy.world_x) - cam_x
+            ey = int(enemy.world_y) - cam_y
+            enemy.draw(screen, ex, ey, current_time)
+        px_screen = int(player.world_x) - cam_x
+        py_screen = int(player.world_y) - cam_y
+        player.draw(screen, px_screen, py_screen, current_time)
+        draw_fadeout(screen, alpha)
+
+        if elapsed >= BATTLE_CLEAR_FADEOUT_DURATION:
+            game_state       = "post_battle_prefect"
+            player.hina_sx   = 500.0
+            player.hina_sy   = 560.0
+            player.costume   = "uniform"
+            aco_clear_talked = False
+            aco_clear_dlg    = None
+            play_funky_road()
+
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
+
+    # ── 전투 후 선도부실 (아코 칭찬) ──
+    if game_state == "post_battle_prefect":
+        keys = pygame.key.get_pressed()
+        player.update_prefect_room(keys, current_time)
+        e_now = keys[pygame.K_e]
+
+        dist_aco = math.hypot(player.hina_sx - ACO_SCREEN_POS[0],
+                              player.hina_sy - ACO_SCREEN_POS[1])
+        near_aco = dist_aco < ACO_INTERACT_RADIUS and not aco_clear_talked
+
+        if e_now and not e_prev and near_aco:
+            aco_clear_dlg = DialogSystem(ACO_CLEAR_DIALOG)
+            game_state    = "post_battle_aco_dlg"
+
+        e_prev = e_now
+
+        mission_txt = None if aco_clear_talked else MISSION_AFTER_BATTLE
+
+        draw_prefect_room(screen, player, current_time,
+                          near_aco=near_aco,
+                          mission=mission_txt)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
+
+    # ── 전투 후 아코 대화 ──
+    if game_state == "post_battle_aco_dlg":
+        if aco_clear_dlg:
+            aco_clear_dlg.update(current_time)
+        screen.fill((0, 0, 0))
+        if prefect_room_img:
+            screen.blit(prefect_room_img, prefect_room_rect)
+        if aco_img:
+            ax = ACO_SCREEN_POS[0] - ACO_DRAW_W // 2
+            ay = ACO_SCREEN_POS[1] - ACO_DRAW_H // 2
+            screen.blit(aco_img, (ax, ay))
+        else:
+            pygame.draw.circle(screen, (180, 120, 220), ACO_SCREEN_POS, 28)
+        player.draw(screen, int(player.hina_sx), int(player.hina_sy), current_time)
+        if aco_clear_dlg:
+            aco_clear_dlg.draw(screen, current_time)
+        if debug_menu_open:
+            _draw_debug_menu(screen, debug_cursor)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
+
+    # 미정의 상태 폴백
+    game_state = "battle"
 
 pygame.quit()
 sys.exit()
