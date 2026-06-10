@@ -124,11 +124,11 @@ BED_RADIUS = 80
 # ─────────────────────────────────────────────
 ENEMY_DRAW_W = int(90 * SCALE)   # 화면 표시 가로
 ENEMY_DRAW_H = int(108 * SCALE)  # 화면 표시 세로 (600/1000 * ENEMY_DRAW_W * 2 ≈ 비율 유지)
-ENEMY_ANIM_INTERVAL = 300        # 프레임 교체 ms
+ENEMY_ANIM_INTERVAL = 400        # 프레임 교체 ms
 
 # st 이미지 렌더 크기 (원본 850×360 비율 유지)
-ST_DRAW_W = int(85 * SCALE)
-ST_DRAW_H = int(36 * SCALE)
+ST_DRAW_W = int(180 * SCALE)
+ST_DRAW_H = int(70 * SCALE)
 
 def _load_enemy_sprite(name, frame_count=2):
     """가로 2프레임 스프라이트 시트 로드 → [frame0, frame1] 반환"""
@@ -320,9 +320,8 @@ def _point_in_prefect_walkzone(px, py):
 # ─────────────────────────────────────────────
 # 전투 맵 설정
 # ─────────────────────────────────────────────
-BATTLE_MAP_SCALE = 2.5
-BATTLE_MAP_W = int(WIDTH  * BATTLE_MAP_SCALE)
-BATTLE_MAP_H = int(HEIGHT * BATTLE_MAP_SCALE)
+BATTLE_MAP_W = 2500   # 월드 가로
+BATTLE_MAP_H = 1750   # 월드 세로
 
 battle_bg_img  = None
 battle_bg_path = os.path.join(ASSETS_DIR, "gehenna.png")
@@ -333,27 +332,32 @@ if os.path.exists(battle_bg_path):
     except Exception as e:
         print(f"[WARN] battle_map 로드 실패: {e}")
 
-_S = BATTLE_MAP_SCALE
-
-def _si(v): return int(v * _S)
-
+# 워크존 폴리곤 — 월드 좌표 직접 입력
 _BATTLE_WALK_POLYS = [
-    [(_si(310), _si(28)),  (_si(740), _si(28)),  (_si(740), _si(672)), (_si(310), _si(672))],
-    [(_si(28),  _si(28)),  (_si(285), _si(28)),  (_si(285), _si(262)), (_si(28),  _si(262))],
-    [(_si(757), _si(28)),  (_si(980), _si(28)),  (_si(980), _si(262)), (_si(757), _si(262))],
-    [(_si(28),  _si(283)), (_si(285), _si(283)), (_si(285), _si(465)), (_si(28),  _si(465))],
-    [(_si(757), _si(283)), (_si(980), _si(283)), (_si(980), _si(465)), (_si(757), _si(465))],
-    [(_si(28),  _si(487)), (_si(285), _si(487)), (_si(285), _si(672)), (_si(28),  _si(672))],
-    [(_si(757), _si(487)), (_si(980), _si(487)), (_si(980), _si(672)), (_si(757), _si(672))],
+    # 중앙 홀
+    [(775,  70),  (1850, 70),  (1850, 1680), (775,  1680)],
+    # 좌상 교실
+    [(70,   70),  (712,  70),  (712,  655),  (70,   655)],
+    # 우상 휴게실
+    [(1892, 70),  (2450, 70),  (2450, 655),  (1892, 655)],
+    # 좌중 창고
+    [(70,   707), (712,  707), (712,  1162), (70,   1162)],
+    # 우중 교무실
+    [(1892, 707), (2450, 707), (2450, 1162), (1892, 1162)],
+    # 좌하 식당
+    [(70,   1217),(712,  1217),(712,  1680), (70,   1680)],
+    # 우하 입구 (히나 시작)
+    [(1892, 1217),(2450, 1217),(2450, 1680), (1892, 1680)],
 ]
 
+# 통로 Rect — (x, y, w, h) 월드 좌표 직접 입력
 _BATTLE_CORRIDOR_RECTS = [
-    pygame.Rect(_si(285), _si(80),  _si(30), _si(120)),
-    pygame.Rect(_si(740), _si(80),  _si(30), _si(120)),
-    pygame.Rect(_si(285), _si(310), _si(30), _si(100)),
-    pygame.Rect(_si(740), _si(310), _si(30), _si(100)),
-    pygame.Rect(_si(285), _si(530), _si(30), _si(100)),
-    pygame.Rect(_si(740), _si(530), _si(30), _si(100)),
+    pygame.Rect(712,  200,  75, 300),   # 좌상
+    pygame.Rect(1850, 200,  75, 300),   # 우상
+    pygame.Rect(712,  775,  75, 250),   # 좌중
+    pygame.Rect(1850, 775,  75, 250),   # 우중
+    pygame.Rect(712,  1325, 75, 250),   # 좌하
+    pygame.Rect(1850, 1325, 75, 250),   # 우하
 ]
 
 def _point_in_battle_walkzone(px, py):
@@ -365,8 +369,8 @@ def _point_in_battle_walkzone(px, py):
             return True
     return False
 
-BATTLE_START_X = 870.0 * BATTLE_MAP_SCALE
-BATTLE_START_Y = 620.0 * BATTLE_MAP_SCALE
+BATTLE_START_X = 2175.0   # 히나 시작 위치 X (월드 좌표)
+BATTLE_START_Y = 1550.0   # 히나 시작 위치 Y (월드 좌표)
 
 rooms            = []
 id_map           = {}
@@ -584,9 +588,9 @@ class Player:
                 surface.blit(fi, fi.get_rect(center=(mx2, my2)))
 
 # ─────────────────────────────────────────────
-# 적 클래스 (스프라이트 + HP 5)
+# 적 클래스 (스프라이트 + HP 3)
 # ─────────────────────────────────────────────
-ENEMY_MAX_HP = 5
+ENEMY_MAX_HP = 3
 
 class Enemy:
     def __init__(self, x, y, room_id, enemy_type=1):
@@ -672,17 +676,15 @@ player.world_x = BATTLE_START_X
 player.world_y = BATTLE_START_Y
 
 enemies = []
-_s = BATTLE_MAP_SCALE
+# 적 배치 존 — 월드 좌표 직접 입력 (x1, y1, x2, y2)
 _BATTLE_ENEMY_ZONES = [
-    (int(28*_s),  int(28*_s),  int(285*_s), int(262*_s)),
-    (int(757*_s), int(28*_s),  int(980*_s), int(262*_s)),
-    (int(28*_s),  int(283*_s), int(285*_s), int(465*_s)),
-    (int(757*_s), int(283*_s), int(980*_s), int(465*_s)),
-    (int(28*_s),  int(487*_s), int(285*_s), int(672*_s)),
+    (70,   70,   712,  655),    # 좌상 교실
+    (1892, 70,   2450, 655),    # 우상 휴게실
+    (70,   707,  712,  1162),   # 좌중 창고
 ]
-_mg = int(30 * BATTLE_MAP_SCALE)
+_mg = 75  # 벽에서의 최소 여백 (월드 단위)
 for zone_idx, (x1, y1, x2, y2) in enumerate(_BATTLE_ENEMY_ZONES):
-    for _ in range(random.randint(2, 4)):
+    for _ in range(random.randint(1, 2)):
         ex = random.randint(x1 + _mg, x2 - _mg)
         ey = random.randint(y1 + _mg, y2 - _mg)
         etype = random.choice([1, 2])
@@ -781,13 +783,11 @@ ACO_DIALOG = [
 # ── 전투 클리어 후 선도부실 아코 칭찬 대화 ──
 ACO_CLEAR_DIALOG = [
     ("아코", "선도부", "선도부장님, 수고하셨습니다."),
-    ("히나", "선도부", "...별것 아니야."),
-    ("아코", "선도부", "아닙니다. 이번 건은 꽤 까다로운 상황이었는데, 역시 선도부장님이십니다."),
-    ("아코", "선도부", "덕분에 학원 내 소란이 빠르게 진정될 것 같습니다."),
-    ("히나", "선도부", "그 정도라면 다행이군."),
-    ("아코", "선도부", "정말 감사합니다, 선도부장님. 수고하셨어요."),
-    ("히나", "선도부", "......됐어. 다음 건이나 가져와."),
-    ("아코", "선도부", "예, 알겠습니다. 잘하셨습니다!"),
+    ("히나", "선도부", "... 별다른 단서는 없었어."),
+    ("아코", "선도부", "이번 소란을 이렇게 빨리 진정시킨 건 선도부장님뿐입니다."),
+    ("아코", "선도부", "학생들도 안정을 되찾고 있으니 너무 자책하지 않으셔도 됩니다."),
+    ("히나", "선도부", "오늘은 이만 들어가 볼게. 조금 피곤하네."),
+    ("아코", "선도부", "예, 충분히 쉬세요 선도부장님."),
 ]
 
 MISSION_HINA_ROOM  = "제복을 갈아입기."
